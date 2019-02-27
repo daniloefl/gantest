@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # to be able to run this:
 # sudo apt-get install python3 python3-pip
@@ -255,7 +255,7 @@ class WGANGP(object):
     fig, ax = plt.subplots(figsize = (20, 20), nrows = 5, ncols = 5)
     for i in range(5):
       for j in range(5):
-        out = self.generator.predict(np.random.normal(loc = 0.0, scale = 1.0, size = (1, self.n_dimensions)))
+        out = self.generator.predict(np.random.normal(loc = 0.0, scale = 1.0, size = (1, self.n_dimensions,)))[0,:,:,0]
         sns.heatmap(out, vmax = .8, square = True, ax = ax[i, j])
         ax[i, j].set(xlabel = '', ylabel = '', title = '');
     plt.savefig(filename)
@@ -266,7 +266,7 @@ class WGANGP(object):
       x = self.x_train
     else:
       x = self.x_test
-    x = np.random.shuffle(x)
+    np.random.shuffle(x)
     x_batch = x[0:self.n_batch,:,:, np.newaxis]
     return x_batch
 
