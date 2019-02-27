@@ -127,22 +127,22 @@ class WGANGP(object):
 
     xc = self.critic_input
 
-    xc = K.layers.Conv2D(32, (5, 5), padding = "same", activation = None, name = "adv_0")(xc)
+    xc = K.layers.Conv2D(32, (3,3), padding = "same", activation = None, name = "adv_0")(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
-    xc = K.layers.Conv2D(16, (5, 5), padding = "same", activation = None, name = "adv_1")(xc)
+    xc = K.layers.Conv2D(16, (3,3), padding = "same", activation = None, name = "adv_1")(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
     xc = K.layers.MaxPooling2D(pool_size = (2, 2), name = "adv_2")(xc)
     xc = K.layers.Dropout(0.25)(xc)
 
-    xc = K.layers.Conv2D(32, (5, 5), padding = "same", activation = None, name = "adv_3")(xc)
+    xc = K.layers.Conv2D(8, (3,3), padding = "same", activation = None, name = "adv_3")(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
-    xc = K.layers.Conv2D(16, (5, 5), padding = "same", activation = None, name = "adv_4")(xc)
+    xc = K.layers.Conv2D(4, (3,3), padding = "same", activation = None, name = "adv_4")(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
     xc = K.layers.MaxPooling2D(pool_size = (2, 2), name = "adv_5")(xc)
     xc = K.layers.Dropout(0.25)(xc)
 
     xc = K.layers.Flatten()(xc)
-    xc = K.layers.Dense(256, activation = None, name = "adv_6")(xc)
+    xc = K.layers.Dense(64, activation = None, name = "adv_6")(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
     xc = K.layers.Dropout(0.5)(xc)
     xc = K.layers.Dense(1, activation = None, name = "adv_7")(xc)
@@ -163,25 +163,25 @@ class WGANGP(object):
     xg = K.layers.Dense(self.n_x*self.n_y*16, activation = None, name = "gen_0")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Dropout(0.5)(xg)
-    xg = K.layers.Dense(self.n_x*self.n_y*16, activation = None, name = "gen_1")(xg)
+    xg = K.layers.Dense(self.n_x*self.n_y*8, activation = None, name = "gen_1")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Dropout(0.5)(xg)
 
     xg = K.layers.Reshape((self.n_x, self.n_y, 16))(xg)
 
     xg = K.layers.UpSampling2D(name = "gen_2")(xg)
-    xg = K.layers.Conv2DTranspose(int(16/2), (5,5), padding = "same", activation = None, name = "gen_3")(xg)
+    xg = K.layers.Conv2DTranspose(int(16/2), (3,3), padding = "same", activation = None, name = "gen_3")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.UpSampling2D(name = "gen_4")(xg)
-    xg = K.layers.Conv2DTranspose(int(16/4), (5,5), padding = "same", activation = None, name = "gen_5")(xg)
+    xg = K.layers.Conv2DTranspose(int(16/4), (3,3), padding = "same", activation = None, name = "gen_5")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Dropout(0.25)(xg)
 
     xg = K.layers.UpSampling2D(name = "gen_6")(xg)
-    xg = K.layers.Conv2DTranspose(int(16/8), (5,5), padding = "same", activation = None, name = "gen_7")(xg)
+    xg = K.layers.Conv2DTranspose(int(16/8), (3,3), padding = "same", activation = None, name = "gen_7")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.UpSampling2D(name = "gen_8")(xg)
-    xg = K.layers.Conv2DTranspose(int(16/16), (5,5), padding = "same", activation = None, name = "gen_9")(xg)
+    xg = K.layers.Conv2DTranspose(int(16/16), (3,3), padding = "same", activation = None, name = "gen_9")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Dropout(0.25)(xg)
 
