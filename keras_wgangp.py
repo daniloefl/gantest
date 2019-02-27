@@ -142,7 +142,7 @@ class WGANGP(object):
     xc = K.layers.Dropout(0.25)(xc)
 
     xc = K.layers.Flatten()(xc)
-    xc = K.layers.Dense(64, activation = None, name = "adv_6")(xc)
+    xc = K.layers.Dense(128, activation = None, name = "adv_6")(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
     xc = K.layers.Dropout(0.5)(xc)
     xc = K.layers.Dense(1, activation = None, name = "adv_7")(xc)
@@ -160,28 +160,24 @@ class WGANGP(object):
 
     xg = self.generator_input
 
-    xg = K.layers.Dense(self.n_x*self.n_y*16, activation = None, name = "gen_0")(xg)
+    xg = K.layers.Dense(128, activation = None, name = "gen_0")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Dropout(0.5)(xg)
-    xg = K.layers.Dense(self.n_x*self.n_y*8, activation = None, name = "gen_1")(xg)
+    xg = K.layers.Dense(self.n_x*self.n_y*1, activation = None, name = "gen_1")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Dropout(0.5)(xg)
 
-    xg = K.layers.Reshape((self.n_x, self.n_y, 16))(xg)
+    xg = K.layers.Reshape((self.n_x, self.n_y, 1))(xg)
 
-    xg = K.layers.UpSampling2D(name = "gen_2")(xg)
-    xg = K.layers.Conv2DTranspose(int(16/2), (3,3), padding = "same", activation = None, name = "gen_3")(xg)
+    xg = K.layers.Conv2DTranspose(16, (3,3), padding = "same", activation = None, name = "gen_3")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
-    xg = K.layers.UpSampling2D(name = "gen_4")(xg)
-    xg = K.layers.Conv2DTranspose(int(16/4), (3,3), padding = "same", activation = None, name = "gen_5")(xg)
+    xg = K.layers.Conv2DTranspose(8, (3,3), padding = "same", activation = None, name = "gen_5")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Dropout(0.25)(xg)
 
-    xg = K.layers.UpSampling2D(name = "gen_6")(xg)
-    xg = K.layers.Conv2DTranspose(int(16/8), (3,3), padding = "same", activation = None, name = "gen_7")(xg)
+    xg = K.layers.Conv2DTranspose(4, (3,3), padding = "same", activation = None, name = "gen_7")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
-    xg = K.layers.UpSampling2D(name = "gen_8")(xg)
-    xg = K.layers.Conv2DTranspose(int(16/16), (3,3), padding = "same", activation = None, name = "gen_9")(xg)
+    xg = K.layers.Conv2DTranspose(1, (3,3), padding = "same", activation = None, name = "gen_8")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Dropout(0.25)(xg)
 
@@ -252,7 +248,6 @@ class WGANGP(object):
     self.x_test = self.x_test.astype('float32')
     self.x_train /= 255.0
     self.x_test /= 255.0
-    print(self.x_train.shape)
 
   def plot_generator_output(self, filename):
     import matplotlib.pyplot as plt
@@ -272,7 +267,7 @@ class WGANGP(object):
     else:
       x = self.x_test
     x = np.random.shuffle(x)
-    x_batch = x[0:self.n_batch,:,:]
+    x_batch = x[0:self.n_batch,:,:, np.newaxis]
     return x_batch
 
   def train(self, prefix):
