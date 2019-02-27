@@ -40,11 +40,11 @@ def smoothen(y):
   box = np.ones(N)/float(N)
   return np.convolve(y, box, mode = 'same')
 
-def gradient_penalty_loss(y_true, y_pred, critic, generator, z, real, N):
+def gradient_penalty_loss(y_true, y_pred, critic, generator, z, real, N, n_x, n_y):
   d1 = generator(z)
-  d2 = fake
+  d2 = real
   diff = d2 - d1
-  epsilon = K.backend.random_uniform_variable(shape=[N, 1], low = 0., high = 1.)
+  epsilon = K.backend.random_uniform_variable(shape=[N, n_x, n_y, 1], low = 0., high = 1.)
   interp_input = d1 + (epsilon*diff)
   gradients = K.backend.gradients(critic(interp_input), [interp_input])[0]
   ## not needed as there is a single element in interp_input here (the discriminator output)
@@ -123,7 +123,7 @@ class WGANGP(object):
     Create critic network.
   '''
   def create_critic(self):
-    self.critic_input = Input(shape = (self.n_x, self.n_y), name = 'critic_input')
+    self.critic_input = Input(shape = (self.n_x, self.n_y, 1), name = 'critic_input')
 
     xc = self.critic_input
 
@@ -137,7 +137,7 @@ class WGANGP(object):
     xc = K.layers.Conv2D(32, (5, 5), padding = "same", activation = None, name = "adv_3")(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
     xc = K.layers.Conv2D(16, (5, 5), padding = "same", activation = None, name = "adv_4")(xc)
-    xc = layers.LeakyReLU(0.2)(xc)
+    xc = K.layers.LeakyReLU(0.2)(xc)
     xc = K.layers.MaxPooling2D(pool_size = (2, 2), name = "adv_5")(xc)
     xc = K.layers.Dropout(0.25)(xc)
 
@@ -160,27 +160,29 @@ class WGANGP(object):
 
     xg = self.generator_input
 
-    xg = K.layers.Dense(256, activation = None, name = "gen_0")(xg)
+    xg = K.layers.Dense(self.n_x*self.n_y*16, activation = None, name = "gen_0")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Dropout(0.5)(xg)
-    xg = K.layers.Dense(self.n_x*self.n_y, activation = None, name = "gen_1")(xg)
+    xg = K.layers.Dense(self.n_x*self.n_y*16, activation = None, name = "gen_1")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Dropout(0.5)(xg)
 
-    xg = K.layers.Reshape((self.n_x, self.n_y))(xg)
+    xg = K.layers.Reshape((self.n_x, self.n_y, 16))(xg)
 
-    xg = K.layers.Conv2D(32, (5, 5), padding = "same", activation = None, name = "gen_2")(xg)
+    xg = K.layers.UpSampling2D(name = "gen_2")(xg)
+    xg = K.layers.Conv2DTranspose(int(16/2), (5,5), padding = "same", activation = None, name = "gen_3")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
-    xg = K.layers.Conv2D(16, (5, 5), padding = "same", activation = None, name = "gen_3")(xg)
+    xg = K.layers.UpSampling2D(name = "gen_4")(xg)
+    xg = K.layers.Conv2DTranspose(int(16/4), (5,5), padding = "same", activation = None, name = "gen_5")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
-    xg = K.layers.MaxPooling2D(pool_size = (2, 2), name = "gen_4")(xg)
     xg = K.layers.Dropout(0.25)(xg)
 
-    xg = K.layers.Conv2D(32, (5, 5), padding = "same", activation = None, name = "gen_5")(xg)
+    xg = K.layers.UpSampling2D(name = "gen_6")(xg)
+    xg = K.layers.Conv2DTranspose(int(16/8), (5,5), padding = "same", activation = None, name = "gen_7")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
-    xg = K.layers.Conv2D(16, (5, 5), padding = "same", activation = None, name = "gen_6")(xg)
-    xg = layers.LeakyReLU(0.2)(xg)
-    xg = K.layers.MaxPooling2D(pool_size = (2, 2), name = "gen_7")(xg)
+    xg = K.layers.UpSampling2D(name = "gen_8")(xg)
+    xg = K.layers.Conv2DTranspose(int(16/16), (5,5), padding = "same", activation = None, name = "gen_9")(xg)
+    xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Dropout(0.25)(xg)
 
     self.generator = Model(self.generator_input, xg, name = "generator")
@@ -201,10 +203,10 @@ class WGANGP(object):
 
     self.dummy_input = Input(shape = (1,), name = 'dummy_input')
     self.z_input = Input(shape = (self.n_dimensions,), name = 'z_input')
-    self.real_input = Input(shape = (self.n_x, self.n_y), name = 'real_input')
+    self.real_input = Input(shape = (self.n_x, self.n_y, 1), name = 'real_input')
 
     from functools import partial
-    partial_gp_loss = partial(gradient_penalty_loss, critic = self.critic, generator = self.generator, z = self.z_input, real = self.real_input, N = self.n_batch)
+    partial_gp_loss = partial(gradient_penalty_loss, critic = self.critic, generator = self.generator, z = self.z_input, real = self.real_input, N = self.n_batch, n_x = self.n_x, n_y = self.n_y)
 
     wdistance = K.layers.Subtract()([self.critic(self.generator(self.z_input)),
                                      self.critic(self.real_input)])
@@ -246,19 +248,21 @@ class WGANGP(object):
   '''
   def read_input_from_files(self):
     (self.x_train, self.y_train), (self.x_test, self.y_test) = K.datasets.mnist.load_data()
-    self.x_train = x_train.astype('float32')
-    self.x_test = x_test.astype('float32')
+    self.x_train = self.x_train.astype('float32')
+    self.x_test = self.x_test.astype('float32')
     self.x_train /= 255.0
     self.x_test /= 255.0
+    print(self.x_train.shape)
 
   def plot_generator_output(self, filename):
     import matplotlib.pyplot as plt
     import seaborn as sns
-    out = self.generator.predict(np.random.normal(loc = 0.0, scale = 1.0, size = (1, self.n_dimensions)))
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111)
-    sns.heatmap(out, vmax = .8, square = True)
-    ax.set(xlabel = '', ylabel = '', title = '');
+    fig, ax = plt.subplots(figsize = (20, 20), nrows = 5, ncols = 5)
+    for i in range(5):
+      for j in range(5):
+        out = self.generator.predict(np.random.normal(loc = 0.0, scale = 1.0, size = (1, self.n_dimensions)))
+        sns.heatmap(out, vmax = .8, square = True, ax = ax[i, j])
+        ax[i, j].set(xlabel = '', ylabel = '', title = '');
     plt.savefig(filename)
     plt.close("all")
 
