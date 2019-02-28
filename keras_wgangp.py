@@ -266,7 +266,7 @@ class WGANGP(object):
     import seaborn as sns
     fig, ax = plt.subplots(figsize = (20, 20), nrows = 5, ncols = 5)
     z = np.random.normal(loc = 0.0, scale = 1.0, size = (5*5, self.n_dimensions,))
-    out = self.generator.predict(z)
+    out = self.generator.predict(z, verbose = 0)
     for i in range(5):
       for j in range(5):
         sns.heatmap(out[j+5*i,:,:,0], vmax = .8, square = True, ax = ax[i, j])
@@ -418,6 +418,17 @@ class WGANGP(object):
   '''
   Load stored network
   '''
+  def load_generator(self, generator_filename):
+    json_file = open('%s.json' % generator_filename, 'r')
+    loaded_model_json = json_file.read()
+    json_file.close()
+    self.generator = K.models.model_from_json(loaded_model_json, custom_objects={'LayerNormalization': LayerNormalization})
+    self.generator.load_weights("%s.h5" % generator_filename)
+    #self.generator.compile(loss = K.losses.mean_squared_error, optimizer = K.optimizers.Adam(lr = 1e-4), metrics = [])
+
+  '''
+  Load stored network
+  '''
   def load(self, generator_filename, critic_filename):
     json_file = open('%s.json' % generator_filename, 'r')
     loaded_model_json = json_file.read()
@@ -487,7 +498,7 @@ def main():
     network.plot_train_metrics("%s_training.pdf" % prefix, int(trained))
   elif args.mode == 'plot_gen':
     print("Loading network.")
-    network.load("%s_generator_%s" % (prefix, trained), "%s_critic_%s" % (prefix, trained))
+    network.load_generator("%s_generator_%s" % (prefix, trained))
     network.plot_generator_output("%s_generator_output.pdf" % prefix)
   elif args.mode == 'plot_data':
     network.plot_data("%s_data.pdf" % prefix)
