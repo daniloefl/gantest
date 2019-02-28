@@ -253,10 +253,10 @@ class WGANGP(object):
     import matplotlib.pyplot as plt
     import seaborn as sns
     fig, ax = plt.subplots(figsize = (20, 20), nrows = 5, ncols = 5)
+    out = self.get_batch(origin = 'train', size = 5*5)
     for i in range(5):
       for j in range(5):
-        out = self.get_batch('train')[0,:,:,0]
-        sns.heatmap(out, vmax = .8, square = True, ax = ax[i, j])
+        sns.heatmap(out[j+5*i,:,:,0], vmax = .8, square = True, ax = ax[i, j])
         ax[i, j].set(xlabel = '', ylabel = '', title = '');
     plt.savefig(filename)
     plt.close("all")
@@ -265,21 +265,22 @@ class WGANGP(object):
     import matplotlib.pyplot as plt
     import seaborn as sns
     fig, ax = plt.subplots(figsize = (20, 20), nrows = 5, ncols = 5)
+    z = np.random.normal(loc = 0.0, scale = 1.0, size = (5*5, self.n_dimensions,))
+    out = self.generator.predict(z, verbose = 0)
     for i in range(5):
       for j in range(5):
-        out = self.generator.predict(np.random.normal(loc = 0.0, scale = 1.0, size = (1, self.n_dimensions,)))[0,:,:,0]
-        sns.heatmap(out, vmax = .8, square = True, ax = ax[i, j])
+        sns.heatmap(out[j+5*i,:,:,0], vmax = .8, square = True, ax = ax[i, j])
         ax[i, j].set(xlabel = '', ylabel = '', title = '');
     plt.savefig(filename)
     plt.close("all")
 
-  def get_batch(self, origin = 'train'):
+  def get_batch(self, origin = 'train', size = 32):
     if origin == 'train':
       x = self.x_train
     else:
       x = self.x_test
     np.random.shuffle(x)
-    x_batch = x[0:self.n_batch,:,:, np.newaxis]
+    x_batch = x[0:size,:,:, np.newaxis]
     return x_batch
 
   def train(self, prefix):
@@ -295,7 +296,7 @@ class WGANGP(object):
       # step critic
       n_critic = self.n_critic
       for k in range(0, n_critic):
-        x_batch = self.get_batch()
+        x_batch = self.get_batch(size = self.n_batch)
         z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
 
         self.generator.trainable = False
@@ -324,7 +325,7 @@ class WGANGP(object):
         critic_metric_fake /= c
         c = 0.0
         for k in range(32):
-          x = self.get_batch(origin = 'test')
+          x = self.get_batch(origin = 'test', size = self.n_batch)
           critic_metric_real += np.mean(self.critic.predict(x))
           c += 1.0
         critic_metric_real /= c
@@ -333,7 +334,7 @@ class WGANGP(object):
 
         critic_gradient_penalty = 0
         for k in range(0, self.n_critic):
-          x_batch = self.get_batch(origin = 'test')
+          x_batch = self.get_batch(origin = 'test', size = self.n_batch)
           z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
 
           self.generator.trainable = False
@@ -417,6 +418,17 @@ class WGANGP(object):
   '''
   Load stored network
   '''
+  def load_generator(self, generator_filename):
+    json_file = open('%s.json' % generator_filename, 'r')
+    loaded_model_json = json_file.read()
+    json_file.close()
+    self.generator = K.models.model_from_json(loaded_model_json, custom_objects={'LayerNormalization': LayerNormalization})
+    self.generator.load_weights("%s.h5" % generator_filename)
+    #self.generator.compile(loss = K.losses.mean_squared_error, optimizer = K.optimizers.Adam(lr = 1e-4), metrics = [])
+
+  '''
+  Load stored network
+  '''
   def load(self, generator_filename, critic_filename):
     json_file = open('%s.json' % generator_filename, 'r')
     loaded_model_json = json_file.read()
@@ -427,7 +439,7 @@ class WGANGP(object):
     json_file = open('%s.json' % critic_filename, 'r')
     loaded_model_json = json_file.read()
     json_file.close()
-    self.critic = K.models.model_from_json(loaded_model_json, custom_objects = {'MinibatchDiscrimination': MinibatchDiscrimination, 'LayerNormalization': LayerNormalization})
+    self.critic = K.models.model_from_json(loaded_model_json, custom_objects = {'LayerNormalization': LayerNormalization})
     self.critic.load_weights("%s.h5" % critic_filename)
 
     self.critic_input = K.layers.Input(shape = (self.n_x, self.n_y), name = 'critic_input')
@@ -448,9 +460,9 @@ def main():
   parser.add_argument('--prefix', dest='prefix', action='store',
                     default='wgangp',
                     help='Prefix to be added to filenames when producing plots. (default: "wgangp")')
-  parser.add_argument('--mode', metavar='MODE', choices=['train', 'read', 'plot_data'],
+  parser.add_argument('--mode', metavar='MODE', choices=['train', 'plot_loss', 'plot_gen', 'plot_data'],
                      default = 'train',
-                     help='The mode is either "train" (a neural network), "read" (a pre-trained network), or "plot_data" (plot training data). (default: train)')
+                     help='The mode is either "train" (a neural network), "plot_loss" (plot the loss function of a previous training), "plot_gen" (show samples from the generator), "plot_data" (plot examples of the training data sample). (default: train)')
   args = parser.parse_args()
   prefix = args.prefix
   trained = args.trained
@@ -479,14 +491,20 @@ def main():
     network.plot_train_metrics("%s_training.pdf" % prefix)
 
     network.plot_generator_output("%s_generator_output.pdf" % prefix)
-  else: # just load the pre-trained network otherwise
+  elif args.mode == 'plot_loss':
     print("Loading network.")
     network.load("%s_generator_%s" % (prefix, trained), "%s_critic_%s" % (prefix, trained))
 
     network.load_loss("%s_loss.h5" % prefix)
     network.plot_train_metrics("%s_training.pdf" % prefix, int(trained))
-
+  elif args.mode == 'plot_gen':
+    print("Loading network.")
+    network.load_generator("%s_generator_%s" % (prefix, trained))
     network.plot_generator_output("%s_generator_output.pdf" % prefix)
+  elif args.mode == 'plot_data':
+    network.plot_data("%s_data.pdf" % prefix)
+  else:
+    print("I cannot understand the mode ", args.mode)
 
 if __name__ == '__main__':
   main()
