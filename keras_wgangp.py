@@ -93,7 +93,7 @@ class WGANGP(object):
   3) Go back to 1 and repeat this n_iteration times.
   '''
 
-  def __init__(self, n_iteration = 20000, n_critic = 5,
+  def __init__(self, n_iteration = 5000, n_critic = 5,
                n_batch = 32,
                lambda_gp = 10.0,
                n_eval = 50,
@@ -248,6 +248,18 @@ class WGANGP(object):
     self.x_test = self.x_test.astype('float32')
     self.x_train /= 255.0
     self.x_test /= 255.0
+
+  def plot_data(self, filename):
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    fig, ax = plt.subplots(figsize = (20, 20), nrows = 5, ncols = 5)
+    for i in range(5):
+      for j in range(5):
+        out = self.get_batch('train')[0,:,:,0]
+        sns.heatmap(out, vmax = .8, square = True, ax = ax[i, j])
+        ax[i, j].set(xlabel = '', ylabel = '', title = '');
+    plt.savefig(filename)
+    plt.close("all")
 
   def plot_generator_output(self, filename):
     import matplotlib.pyplot as plt
@@ -436,9 +448,9 @@ def main():
   parser.add_argument('--prefix', dest='prefix', action='store',
                     default='wgangp',
                     help='Prefix to be added to filenames when producing plots. (default: "wgangp")')
-  parser.add_argument('--mode', metavar='MODE', choices=['train', 'read'],
+  parser.add_argument('--mode', metavar='MODE', choices=['train', 'read', 'plot_data'],
                      default = 'train',
-                     help='The mode is either "train" (a neural network) or "read" (a pre-trained network). (default: train)')
+                     help='The mode is either "train" (a neural network), "read" (a pre-trained network), or "plot_data" (plot training data). (default: train)')
   args = parser.parse_args()
   prefix = args.prefix
   trained = args.trained
@@ -448,8 +460,9 @@ def main():
   # read it from disk
   network.read_input_from_files()
 
-  # when training make some debug plots and prepare the network
-  if args.mode == 'train':
+  if args.mode == 'plot_data':
+    network.plot_data("%s_data.pdf" % prefix)
+  elif args.mode == 'train': # when training make some debug plots and prepare the network
     # create network
     network.create_networks()
 
