@@ -134,15 +134,15 @@ class WGANGP(object):
     xc = K.layers.MaxPooling2D(pool_size = (2, 2), name = "adv_2")(xc)
     xc = K.layers.Dropout(0.25)(xc)
 
-    xc = K.layers.Conv2D(8, (3,3), padding = "same", activation = None, name = "adv_3")(xc)
+    xc = K.layers.Conv2D(16, (3,3), padding = "same", activation = None, name = "adv_3")(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
-    xc = K.layers.Conv2D(4, (3,3), padding = "same", activation = None, name = "adv_4")(xc)
+    xc = K.layers.Conv2D(8, (3,3), padding = "same", activation = None, name = "adv_4")(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
     xc = K.layers.MaxPooling2D(pool_size = (2, 2), name = "adv_5")(xc)
     xc = K.layers.Dropout(0.25)(xc)
 
     xc = K.layers.Flatten()(xc)
-    xc = K.layers.Dense(128, activation = None, name = "adv_6")(xc)
+    xc = K.layers.Dense(256, activation = None, name = "adv_6")(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
     xc = K.layers.Dropout(0.5)(xc)
     xc = K.layers.Dense(1, activation = None, name = "adv_7")(xc)
