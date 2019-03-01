@@ -472,8 +472,9 @@ def main():
   # read it from disk
   network.read_input_from_files()
 
-  # when training make some debug plots and prepare the network
-  if args.mode == 'train':
+  if args.mode == 'plot_data':
+    network.plot_data("%s_data.pdf" % prefix)
+  elif args.mode == 'train': # when training make some debug plots and prepare the network
     # create network
     network.create_networks()
 
