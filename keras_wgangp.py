@@ -2,7 +2,7 @@
 
 # to be able to run this:
 # sudo apt-get install python3 python3-pip
-# pip3 install --user matplotlib seaborn numpy pandas tensorflow keras h5py
+# pip3 install --user matplotlib seaborn numpy tensorflow keras h5py
 
 from __future__ import absolute_import
 from __future__ import division
@@ -19,7 +19,6 @@ mpl.use('Agg')
 import numpy as np
 # to manipulate data using DataFrame
 import h5py
-import pandas as pd
 
 #import plaidml.keras
 #import plaidml
@@ -56,9 +55,6 @@ def gradient_penalty_loss(y_true, y_pred, critic, generator, z, real, N, n_x, n_
 def wasserstein_loss(y_true, y_pred):
   return K.backend.mean(y_true*y_pred, axis = 0)
 
-def wasserstein_loss_abs(y_true, y_pred):
-  return K.backend.square(K.backend.mean(y_true*y_pred, axis = 0))
-
 class WGANGP(object):
   '''
   Implementation of the Wasserstein GAN with Gradient Penalty algorithm to generate samples of a training set.
@@ -93,12 +89,12 @@ class WGANGP(object):
   3) Go back to 1 and repeat this n_iteration times.
   '''
 
-  def __init__(self, n_iteration = 5000, n_critic = 5,
+  def __init__(self, n_iteration = 20000, n_critic = 5,
                n_batch = 32,
                lambda_gp = 10.0,
                n_eval = 50,
                n_x = 28, n_y = 28,
-               n_dimensions = 8):
+               n_dimensions = 200):
     '''
     Initialise the network.
 
@@ -132,19 +128,19 @@ class WGANGP(object):
     xc = K.layers.Conv2D(16, (3,3), padding = "same", activation = None, name = "adv_1")(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
     xc = K.layers.MaxPooling2D(pool_size = (2, 2), name = "adv_2")(xc)
-    xc = K.layers.Dropout(0.25)(xc)
+    #xc = K.layers.Dropout(0.5)(xc)
 
     xc = K.layers.Conv2D(16, (3,3), padding = "same", activation = None, name = "adv_3")(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
     xc = K.layers.Conv2D(8, (3,3), padding = "same", activation = None, name = "adv_4")(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
     xc = K.layers.MaxPooling2D(pool_size = (2, 2), name = "adv_5")(xc)
-    xc = K.layers.Dropout(0.25)(xc)
+    #xc = K.layers.Dropout(0.5)(xc)
 
     xc = K.layers.Flatten()(xc)
     xc = K.layers.Dense(256, activation = None, name = "adv_6")(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
-    xc = K.layers.Dropout(0.5)(xc)
+    #xc = K.layers.Dropout(0.5)(xc)
     xc = K.layers.Dense(1, activation = None, name = "adv_7")(xc)
 
     self.critic = Model(self.critic_input, xc, name = "critic")
@@ -162,10 +158,9 @@ class WGANGP(object):
 
     xg = K.layers.Dense(128, activation = None, name = "gen_0")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
-    xg = K.layers.Dropout(0.5)(xg)
     xg = K.layers.Dense(self.n_x*self.n_y*1, activation = None, name = "gen_1")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
-    xg = K.layers.Dropout(0.5)(xg)
+    #xg = K.layers.Dropout(0.5)(xg)
 
     xg = K.layers.Reshape((self.n_x, self.n_y, 1))(xg)
 
@@ -173,13 +168,12 @@ class WGANGP(object):
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Conv2DTranspose(8, (3,3), padding = "same", activation = None, name = "gen_5")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
-    xg = K.layers.Dropout(0.25)(xg)
 
     xg = K.layers.Conv2DTranspose(4, (3,3), padding = "same", activation = None, name = "gen_7")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Conv2DTranspose(1, (3,3), padding = "same", activation = None, name = "gen_8")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
-    xg = K.layers.Dropout(0.25)(xg)
+    #xg = K.layers.Dropout(0.5)(xg)
 
     self.generator = Model(self.generator_input, xg, name = "generator")
     self.generator.trainable = True
@@ -212,7 +206,7 @@ class WGANGP(object):
                                    name = "gen_fixed_critic")
     self.gen_fixed_critic.compile(loss = [wasserstein_loss, partial_gp_loss],
                                    loss_weights = [1.0, self.lambda_gp],
-                                   optimizer = RMSprop(lr = 1e-4), metrics = [])
+                                   optimizer = Adam(lr = 1e-4, beta_1 = 0), metrics = [])
 
     self.generator.trainable = True
     self.critic.trainable = False
@@ -221,7 +215,7 @@ class WGANGP(object):
                                    name = "gen_critic_fixed")
     self.gen_critic_fixed.compile(loss = [wasserstein_loss],
                                    loss_weights = [-1.0],
-                                   optimizer = RMSprop(lr = 1e-4), metrics = [])
+                                   optimizer = Adam(lr = 1e-4, beta_1 = 0), metrics = [])
 
 
     print("Generator:")
@@ -287,10 +281,10 @@ class WGANGP(object):
     # algorithm:
     # 0) Train adv. to guess fake vs real (freezing gen.)
     # 1) Train gen. to fool adv. (freezing adv.)
-    self.critic_gp_loss_train = []
-    self.critic_loss_train = []
-    self.critic_loss_fake_train = []
-    self.critic_loss_real_train = []
+    self.critic_gp_loss_train = np.array([])
+    self.critic_loss_train = np.array([])
+    self.critic_loss_fake_train = np.array([])
+    self.critic_loss_real_train = np.array([])
     positive_y = np.ones(self.n_batch)
     for epoch in range(self.n_iteration):
       # step critic
@@ -345,26 +339,22 @@ class WGANGP(object):
         critic_gradient_penalty /= float(self.n_critic)
         if critic_gradient_penalty == 0: critic_gradient_penalty = 1e-20
 
-        self.critic_loss_train.append(critic_metric)
-        self.critic_loss_fake_train.append(critic_metric_fake)
-        self.critic_loss_real_train.append(critic_metric_real)
-        self.critic_gp_loss_train.append(critic_gradient_penalty)
+        np.append(self.critic_loss_train, [critic_metric])
+        np.append(self.critic_loss_fake_train, [critic_metric_fake])
+        np.append(self.critic_loss_real_train, [critic_metric_real])
+        np.append(self.critic_gp_loss_train, [critic_gradient_penalty])
+        floss = h5py.File('%s_loss.h5' % prefix, 'w')
+        floss.create_dataset('critic_loss', data = self.critic_loss_train)
+        floss.create_dataset('critic_loss_real', data = self.critic_loss_real_train)
+        floss.create_dataset('critic_loss_fake', data = self.critic_loss_fake_train)
+        floss.create_dataset('critic_gp_loss', data = self.critic_gp_loss_train)
+        floss.close()
 
         print("Batch %5d: L_{critic} = %10.7f ; L_{critic,fake} = %10.7f ; L_{critic,real} = %10.7f ; lambda_{gp} (|grad C| - 1)^2 = %10.7f" % (epoch, critic_metric, critic_metric_fake, critic_metric_real, self.lambda_gp*critic_gradient_penalty))
         self.save("%s_generator_%d" % (prefix, epoch), "%s_critic_%d" % (prefix, epoch))
       #gc.collect()
 
     print("============ End of training ===============")
-    self.critic_loss_train = np.array(self.critic_loss_train)
-    self.critic_loss_real_train = np.array(self.critic_loss_real_train)
-    self.critic_loss_fake_train = np.array(self.critic_loss_fake_train)
-    self.critic_gp_loss_train = np.array(self.critic_gp_loss_train)
-    floss = h5py.File('%s_loss.h5' % prefix, 'w')
-    floss.create_dataset('critic_loss', data = self.critic_loss_train)
-    floss.create_dataset('critic_loss_real', data = self.critic_loss_real_train)
-    floss.create_dataset('critic_loss_fake', data = self.critic_loss_fake_train)
-    floss.create_dataset('critic_gp_loss', data = self.critic_gp_loss_train)
-    floss.close()
 
   def load_loss(self, filename):
     floss = h5py.File(filename)
@@ -372,6 +362,7 @@ class WGANGP(object):
     self.critic_loss_real_train = floss['critic_loss_real'][:]
     self.critic_loss_fake_train = floss['critic_loss_fake'][:]
     self.critic_gp_loss_train = floss['critic_gp_loss'][:]
+    self.n_iteration = self.n_eval*len(self.critic_loss_train)
     floss.close()
 
   def plot_train_metrics(self, filename, nnTaken = -1):
@@ -383,7 +374,7 @@ class WGANGP(object):
     if nnTaken > 0:
       plt.axvline(x = nnTaken, color = 'r', linestyle = '--', label = 'Configuration taken for further analysis')
     ax.set(xlabel='Batches', ylabel='Loss', title='Training evolution');
-    ax.set_ylim([1e-3, 10])
+    ax.set_ylim([1e-1, 100])
     ax.set_yscale('log')
     plt.legend(frameon = False)
     plt.savefig(filename)
@@ -391,8 +382,10 @@ class WGANGP(object):
 
     fig, ax = plt.subplots(figsize=(10, 8))
     fac = 1.0
-    if np.max(np.abs(self.critic_loss_fake_train)) > 0:
+    if np.max(np.abs(self.critic_loss_fake_train)) > np.max(np.abs(self.critic_loss_real_train)):
       fac /= np.max(np.abs(self.critic_loss_fake_train))
+    else:
+      fac /= np.max(np.abs(self.critic_loss_real_train))
     plt.plot(it, smoothen(fac*self.critic_loss_fake_train), color = 'g', label = r' $ %4.2f \mathcal{L}_{\mathrm{critic,fake}}$' % (fac) )
     plt.plot(it, smoothen(-fac*self.critic_loss_real_train), color = 'c', label = r' $ %4.2f \mathcal{L}_{\mathrm{critic,real}}$' % (-fac) )
     if nnTaken > 0:
@@ -492,9 +485,6 @@ def main():
 
     network.plot_generator_output("%s_generator_output.pdf" % prefix)
   elif args.mode == 'plot_loss':
-    print("Loading network.")
-    network.load("%s_generator_%s" % (prefix, trained), "%s_critic_%s" % (prefix, trained))
-
     network.load_loss("%s_loss.h5" % prefix)
     network.plot_train_metrics("%s_training.pdf" % prefix, int(trained))
   elif args.mode == 'plot_gen':
