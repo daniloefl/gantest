@@ -156,7 +156,7 @@ class WGANGP(object):
 
     xg = self.generator_input
 
-    xg = K.layers.Dense(128, activation = None, name = "gen_0")(xg)
+    xg = K.layers.Dense(256, activation = None, name = "gen_0")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Dense(self.n_x*self.n_y*1, activation = None, name = "gen_1")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
@@ -166,12 +166,12 @@ class WGANGP(object):
 
     xg = K.layers.Conv2DTranspose(16, (3,3), padding = "same", activation = None, name = "gen_3")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
-    xg = K.layers.Conv2DTranspose(8, (3,3), padding = "same", activation = None, name = "gen_5")(xg)
+    xg = K.layers.Conv2DTranspose(16, (3,3), padding = "same", activation = None, name = "gen_5")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
 
-    xg = K.layers.Conv2DTranspose(4, (3,3), padding = "same", activation = None, name = "gen_7")(xg)
+    xg = K.layers.Conv2DTranspose(8, (3,3), padding = "same", activation = None, name = "gen_7")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
-    xg = K.layers.Conv2DTranspose(1, (3,3), padding = "same", activation = None, name = "gen_8")(xg)
+    xg = K.layers.Conv2DTranspose(4, (3,3), padding = "same", activation = None, name = "gen_8")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     #xg = K.layers.Dropout(0.5)(xg)
 
