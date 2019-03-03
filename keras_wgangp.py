@@ -339,10 +339,10 @@ class WGANGP(object):
         critic_gradient_penalty /= float(self.n_critic)
         if critic_gradient_penalty == 0: critic_gradient_penalty = 1e-20
 
-        np.append(self.critic_loss_train, [critic_metric])
-        np.append(self.critic_loss_fake_train, [critic_metric_fake])
-        np.append(self.critic_loss_real_train, [critic_metric_real])
-        np.append(self.critic_gp_loss_train, [critic_gradient_penalty])
+        self.critic_loss_train = np.append(self.critic_loss_train, [critic_metric])
+        self.critic_loss_fake_train = np.append(self.critic_loss_fake_train, [critic_metric_fake])
+        self.critic_loss_real_train = np.append(self.critic_loss_real_train, [critic_metric_real])
+        self.critic_gp_loss_train = np.append(self.critic_gp_loss_train, [critic_gradient_penalty])
         floss = h5py.File('%s_loss.h5' % prefix, 'w')
         floss.create_dataset('critic_loss', data = self.critic_loss_train)
         floss.create_dataset('critic_loss_real', data = self.critic_loss_real_train)
