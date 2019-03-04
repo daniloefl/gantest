@@ -89,7 +89,7 @@ class WGANGP(object):
   3) Go back to 1 and repeat this n_iteration times.
   '''
 
-  def __init__(self, n_iteration = 20000, n_critic = 5,
+  def __init__(self, n_iteration = 30000, n_critic = 5,
                n_batch = 32,
                lambda_gp = 10.0,
                n_eval = 50,
@@ -277,7 +277,7 @@ class WGANGP(object):
     x_batch = x[0:size,:,:, np.newaxis]
     return x_batch
 
-  def train(self, prefix):
+  def train(self, prefix, result_dir, network_dir):
     # algorithm:
     # 0) Train adv. to guess fake vs real (freezing gen.)
     # 1) Train gen. to fool adv. (freezing adv.)
@@ -343,7 +343,7 @@ class WGANGP(object):
         self.critic_loss_fake_train = np.append(self.critic_loss_fake_train, [critic_metric_fake])
         self.critic_loss_real_train = np.append(self.critic_loss_real_train, [critic_metric_real])
         self.critic_gp_loss_train = np.append(self.critic_gp_loss_train, [critic_gradient_penalty])
-        floss = h5py.File('%s_loss.h5' % prefix, 'w')
+        floss = h5py.File('%s/%s_loss.h5' % (result_dir, prefix), 'w')
         floss.create_dataset('critic_loss', data = self.critic_loss_train)
         floss.create_dataset('critic_loss_real', data = self.critic_loss_real_train)
         floss.create_dataset('critic_loss_fake', data = self.critic_loss_fake_train)
@@ -351,7 +351,7 @@ class WGANGP(object):
         floss.close()
 
         print("Batch %5d: L_{critic} = %10.7f ; L_{critic,fake} = %10.7f ; L_{critic,real} = %10.7f ; lambda_{gp} (|grad C| - 1)^2 = %10.7f" % (epoch, critic_metric, critic_metric_fake, critic_metric_real, self.lambda_gp*critic_gradient_penalty))
-        self.save("%s_generator_%d" % (prefix, epoch), "%s_critic_%d" % (prefix, epoch))
+        self.save("%s/%s_generator_%d" % (network_dir, prefix, epoch), "%s/%s_critic_%d" % (network_dir, prefix, epoch))
       #gc.collect()
 
     print("============ End of training ===============")
@@ -447,6 +447,12 @@ def main():
   import argparse
 
   parser = argparse.ArgumentParser(description = 'Train a Wasserstein GAN with gradient penalty to generate MNIST signal.')
+  parser.add_argument('--network-dir', dest='network_dir', action='store',
+                    default='network',
+                    help='Directory where networks are saved during training. (default: "network")')
+  parser.add_argument('--result-dir', dest='result_dir', action='store',
+                    default='result',
+                    help='Directory where results are saved. (default: "result")')
   parser.add_argument('--load-trained', dest='trained', action='store',
                     default='5000',
                     help='Number to be appended to end of filename when loading pretrained networks. Ignored during the "train" mode. (default: "1500")')
@@ -462,37 +468,42 @@ def main():
 
   network = WGANGP()
 
+  if not os.path.exists(args.result_dir):
+    os.makedirs(args.result_dir)
+  if not os.path.exists(args.network_dir):
+    os.makedirs(args.network_dir)
+
   # read it from disk
   network.read_input_from_files()
 
   if args.mode == 'plot_data':
-    network.plot_data("%s_data.pdf" % prefix)
+    network.plot_data("%s/%s_data.pdf" % (args.result_dir, prefix))
   elif args.mode == 'train': # when training make some debug plots and prepare the network
     # create network
     network.create_networks()
 
     # for comparison: make a plot of the NN output value before any training
     # this will just be random!
-    network.plot_generator_output("%s_generator_output_before_training.pdf" % prefix)
+    network.plot_generator_output("%s/%s_generator_output_before_training.pdf" % (args.result_dir, prefix))
 
     # train it
     print("Training.")
-    network.train(prefix)
+    network.train(prefix, args.result_dir, args.network_dir)
 
     # plot training evolution
     print("Plotting train metrics.")
-    network.plot_train_metrics("%s_training.pdf" % prefix)
+    network.plot_train_metrics("%s/%s_training.pdf" % (args.result_dir, prefix))
 
-    network.plot_generator_output("%s_generator_output.pdf" % prefix)
+    network.plot_generator_output("%s/%s_generator_output.pdf" % (args.result_dir, prefix))
   elif args.mode == 'plot_loss':
-    network.load_loss("%s_loss.h5" % prefix)
-    network.plot_train_metrics("%s_training.pdf" % prefix, int(trained))
+    network.load_loss("%s/%s_loss.h5" % (args.result_dir, prefix))
+    network.plot_train_metrics("%s/%s_training.pdf" % (args.result_dir, prefix), int(trained))
   elif args.mode == 'plot_gen':
     print("Loading network.")
-    network.load_generator("%s_generator_%s" % (prefix, trained))
-    network.plot_generator_output("%s_generator_output.pdf" % prefix)
+    network.load_generator("%s/%s_generator_%s" % (args.network_dir, prefix, trained))
+    network.plot_generator_output("%s/%s_generator_output.pdf" % (args.result_dir, prefix))
   elif args.mode == 'plot_data':
-    network.plot_data("%s_data.pdf" % prefix)
+    network.plot_data("%s/%s_data.pdf" % (args.result_dir, prefix))
   else:
     print("I cannot understand the mode ", args.mode)
 
