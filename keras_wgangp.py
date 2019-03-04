@@ -93,7 +93,7 @@ class WGANGP(object):
   3) Go back to 1 and repeat this n_iteration times.
   '''
 
-  def __init__(self, n_iteration = 5000, n_critic = 5,
+  def __init__(self, n_iteration = 20000, n_critic = 5,
                n_batch = 32,
                lambda_gp = 10.0,
                n_eval = 50,
@@ -287,10 +287,10 @@ class WGANGP(object):
     # algorithm:
     # 0) Train adv. to guess fake vs real (freezing gen.)
     # 1) Train gen. to fool adv. (freezing adv.)
-    self.critic_gp_loss_train = []
-    self.critic_loss_train = []
-    self.critic_loss_fake_train = []
-    self.critic_loss_real_train = []
+    self.critic_gp_loss_train = np.array([])
+    self.critic_loss_train = np.array([])
+    self.critic_loss_fake_train = np.array([])
+    self.critic_loss_real_train = np.array([])
     positive_y = np.ones(self.n_batch)
     for epoch in range(self.n_iteration):
       # step critic
@@ -345,26 +345,22 @@ class WGANGP(object):
         critic_gradient_penalty /= float(self.n_critic)
         if critic_gradient_penalty == 0: critic_gradient_penalty = 1e-20
 
-        self.critic_loss_train.append(critic_metric)
-        self.critic_loss_fake_train.append(critic_metric_fake)
-        self.critic_loss_real_train.append(critic_metric_real)
-        self.critic_gp_loss_train.append(critic_gradient_penalty)
+        self.critic_loss_train = np.append(self.critic_loss_train, [critic_metric])
+        self.critic_loss_fake_train = np.append(self.critic_loss_fake_train, [critic_metric_fake])
+        self.critic_loss_real_train = np.append(self.critic_loss_real_train, [critic_metric_real])
+        self.critic_gp_loss_train = np.append(self.critic_gp_loss_train, [critic_gradient_penalty])
+        floss = h5py.File('%s_loss.h5' % prefix, 'w')
+        floss.create_dataset('critic_loss', data = self.critic_loss_train)
+        floss.create_dataset('critic_loss_real', data = self.critic_loss_real_train)
+        floss.create_dataset('critic_loss_fake', data = self.critic_loss_fake_train)
+        floss.create_dataset('critic_gp_loss', data = self.critic_gp_loss_train)
+        floss.close()
 
         print("Batch %5d: L_{critic} = %10.7f ; L_{critic,fake} = %10.7f ; L_{critic,real} = %10.7f ; lambda_{gp} (|grad C| - 1)^2 = %10.7f" % (epoch, critic_metric, critic_metric_fake, critic_metric_real, self.lambda_gp*critic_gradient_penalty))
         self.save("%s_generator_%d" % (prefix, epoch), "%s_critic_%d" % (prefix, epoch))
       #gc.collect()
 
     print("============ End of training ===============")
-    self.critic_loss_train = np.array(self.critic_loss_train)
-    self.critic_loss_real_train = np.array(self.critic_loss_real_train)
-    self.critic_loss_fake_train = np.array(self.critic_loss_fake_train)
-    self.critic_gp_loss_train = np.array(self.critic_gp_loss_train)
-    floss = h5py.File('%s_loss.h5' % prefix, 'w')
-    floss.create_dataset('critic_loss', data = self.critic_loss_train)
-    floss.create_dataset('critic_loss_real', data = self.critic_loss_real_train)
-    floss.create_dataset('critic_loss_fake', data = self.critic_loss_fake_train)
-    floss.create_dataset('critic_gp_loss', data = self.critic_gp_loss_train)
-    floss.close()
 
   def load_loss(self, filename):
     floss = h5py.File(filename)
