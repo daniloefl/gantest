@@ -435,10 +435,10 @@ class DMWGANGP(object):
       for k in range(0, n_critic):
         x_batch = self.get_batch(size = self.n_batch)
         z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
-        zc_batch = np.random.uniform(low = 0.0, high = self.n_gens, size = (self.n_batch, 1))
+        zc_batch = np.random.randint(low = 0, high = self.n_gens, size = (self.n_batch, 1))
 
         self.combined_generator.trainable = False
-        self.critic.trainable = True
+        self.critic[0].trainable = True
         self.gen_fixed_critic.train_on_batch([x_batch, z_batch, zc_batch, positive_y],
                                               [positive_y, positive_y],
                                               sample_weight = [positive_y, positive_y])
@@ -446,13 +446,13 @@ class DMWGANGP(object):
       # step generator
       for i in range(0, self.n_gens):
         z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
-        zc_batch = np.random.uniform(low = 0.0, high = self.n_gens, size = (self.n_batch, 1))
+        zc_batch = np.random.randint(low = 0, high = self.n_gens, size = (self.n_batch, 1))
 
         self.combined_generator.trainable = False
         for k in range(0, self.n_gens):
           self.generator[k].trainable = False
         self.generator[i].trainable = True
-        self.critic.trainable = False
+        self.critic[0].trainable = False
         self.gen_critic_fixed[i].train_on_batch([z_batch, zc_batch],
                                                 [positive_y, positive_y],
                                                 sample_weight = [positive_y, positive_y])
@@ -463,7 +463,7 @@ class DMWGANGP(object):
         c = 0.0
         for k in range(32):
           z = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
-          zc = np.random.uniform(low = 0.0, high = self.n_gens, size = (self.n_batch, 1))
+          zc = np.random.randint(low = 0, high = self.n_gens, size = (self.n_batch, 1))
           critic_metric_fake += np.mean(self.critic.predict(self.combined_generator.predict([z, zc], verbose = 0), verbose = 0))
           c += 1.0
         critic_metric_fake /= c
@@ -480,7 +480,7 @@ class DMWGANGP(object):
         for k in range(0, self.n_critic):
           x_batch = self.get_batch(origin = 'test', size = self.n_batch)
           z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
-          zc_batch = np.random.uniform(low = 0.0, high = self.n_gens, size = (self.n_batch, 1))
+          zc_batch = np.random.randint(low = 0, high = self.n_gens, size = (self.n_batch, 1))
 
           self.combined_generator.trainable = False
           self.critic.trainable = True
