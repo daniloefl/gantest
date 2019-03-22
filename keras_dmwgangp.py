@@ -464,13 +464,13 @@ class DMWGANGP(object):
         for k in range(32):
           z = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
           zc = np.random.randint(low = 0, high = self.n_gens, size = (self.n_batch, 1))
-          critic_metric_fake += np.mean(self.critic.predict(self.combined_generator.predict([z, zc], verbose = 0), verbose = 0))
+          critic_metric_fake += np.mean(self.critic[0].predict(self.combined_generator.predict([z, zc], verbose = 0), verbose = 0))
           c += 1.0
         critic_metric_fake /= c
         c = 0.0
         for k in range(32):
           x = self.get_batch(origin = 'test', size = self.n_batch)
-          critic_metric_real += np.mean(self.critic.predict(x))
+          critic_metric_real += np.mean(self.critic[0].predict(x))
           c += 1.0
         critic_metric_real /= c
         critic_metric = critic_metric_fake - critic_metric_real
