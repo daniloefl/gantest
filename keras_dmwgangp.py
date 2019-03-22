@@ -355,7 +355,7 @@ class DMWGANGP(object):
                                   name = "gfc")
     self.gen_fixed_critic.compile(loss = [wasserstein_loss, partial_gp_loss],
                                   loss_weights = [1.0, self.lambda_gp],
-                                  optimizer = Adam(lr = 1e-4, beta_1 = 0), metrics = [])
+                                  optimizer = Adam(lr = 1e-5, beta_1 = 0), metrics = [])
 
 
     def entropy_q(x_in):
@@ -378,7 +378,7 @@ class DMWGANGP(object):
                                        name = "gcf_%d" % i)
       self.gen_critic_fixed[i].compile(loss = [wasserstein_loss, wasserstein_loss],
                                        loss_weights = [-1.0, self.lambda_enc],
-                                       optimizer = Adam(lr = 1e-4, beta_1 = 0), metrics = [])
+                                       optimizer = Adam(lr = 1e-5, beta_1 = 0), metrics = [])
 
     for k in range(self.n_gens):
       self.generator[k].trainable = False
@@ -392,7 +392,7 @@ class DMWGANGP(object):
                              name = "q_generator")
     self.q_generator.compile(loss = [wasserstein_loss],
                              loss_weights = [-1.0],
-                             optimizer = Adam(lr = 1e-4, beta_1 = 0), metrics = [])
+                             optimizer = Adam(lr = 1e-5, beta_1 = 0), metrics = [])
 
     for k in range(self.n_gens):
       self.generator[k].trainable = False
@@ -408,19 +408,19 @@ class DMWGANGP(object):
       return r
     cross_entropy_q_r_loss = K.layers.Lambda(cross_entropy_q_r)([self.real_input, self.zc_input])
 
-    #def entropy_r(x_in):
-    #  res = self.r(x_in[0])
-    #  lres = K.backend.log(1e-8 + res)
-    #  r = - K.backend.mean(res * lres, axis = -1, keepdims = False)
-    #  return r
-    #entropy_r_loss = K.layers.Lambda(entropy_r)([self.zc_input])
+    def entropy_r(x_in):
+      res = self.r(x_in[0])
+      lres = K.backend.log(1e-8 + self.r(x_in[1]))
+      r = - K.backend.mean(res * lres, axis = -1, keepdims = False)
+      return r
+    entropy_r_loss = K.layers.Lambda(entropy_r)([self.zc_input, self.zc_input])
 
     self.r_prior = Model([self.real_input, self.zc_input],
-                         [cross_entropy_q_r_loss], #, entropy_r_loss],
+                         [cross_entropy_q_r_loss, entropy_r_loss],
                           name = "r_prior")
-    self.r_prior.compile(loss = [wasserstein_loss], #, wasserstein_loss],
-                         loss_weights = [1.0], #, -self.lambda_entropy],
-                         optimizer = Adam(lr = 1e-4, beta_1 = 0), metrics = [])
+    self.r_prior.compile(loss = [wasserstein_loss, wasserstein_loss],
+                         loss_weights = [1.0, -self.lambda_entropy],
+                         optimizer = Adam(lr = 1e-5, beta_1 = 0), metrics = [])
 
   '''
     Read data and put it in x_train and x_test after minor preprocessing.
@@ -496,6 +496,7 @@ class DMWGANGP(object):
         self.combined_generator.trainable = False
         self.critic[0].trainable = True
         self.q.trainable = False
+        self.r.trainable = False
         self.gen_fixed_critic.train_on_batch([x_batch, z_batch, c_batch, positive_y],
                                               [positive_y, positive_y],
                                               sample_weight = [positive_y, positive_y])
@@ -512,6 +513,7 @@ class DMWGANGP(object):
         self.generator[i].trainable = True
         self.critic[0].trainable = False
         self.q.trainable = False
+        self.r.trainable = False
         self.gen_critic_fixed[i].train_on_batch([z_batch, c_batch],
                                                 [positive_y, positive_y],
                                                 sample_weight = [positive_y, positive_y])
@@ -537,7 +539,7 @@ class DMWGANGP(object):
       self.q.trainable = False
       self.r.trainable = True
       self.r_prior.train_on_batch([x_batch, zc_batch],
-                                  [positive_y])
+                                  [positive_y, positive_y])
   
       if epoch % self.n_eval == 0:
         critic_metric_fake = 0
