@@ -399,7 +399,7 @@ class DMWGANGP(object):
     self.r.trainable = True
 
     cross_entropy_q_r_loss = partial(cross_entropy_q_r, q = self.q, real_input = self.real_input)
-    self.r_prior = Model([self.zc_input],
+    self.r_prior = Model([self.real_input, self.zc_input],
                          [self.r(self.zc_input), self.r(self.zc_input)],
                           name = "r_prior")
     self.r_prior.compile(loss = [cross_entropy_q_r_loss, entropy_loss],
@@ -519,7 +519,7 @@ class DMWGANGP(object):
       self.critic[0].trainable = False
       self.q.trainable = False
       self.r.trainable = True
-      self.r_prior.train_on_batch([zc_batch],
+      self.r_prior.train_on_batch([self.real_input, zc_batch],
                                   [positive_y, positive_y],
                                   sample_weight = [positive_y, positive_y])
   
