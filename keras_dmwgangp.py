@@ -402,7 +402,7 @@ class DMWGANGP(object):
     self.r_prior = Model([self.real_input, self.zc_input],
                          [self.r(self.zc_input), self.r(self.zc_input)],
                           name = "r_prior")
-    self.r_prior.compile(loss = [cross_entropy_q_r_loss, ],
+    self.r_prior.compile(loss = [cross_entropy_q_r_loss, entropy_loss],
                          loss_weights = [1.0, -self.lambda_entropy],
                          optimizer = Adam(lr = 1e-4, beta_1 = 0), metrics = [])
 
