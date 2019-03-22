@@ -59,10 +59,10 @@ def log_loss(y_true, y_pred):
   return K.backend.mean(y_true*K.backend.log(1e-8 + y_pred), axis = 0)
 
 def cross_entropy_q_r(y_true, y_pred, q, real_input):
-  return -K.backend.mean(q(real_input) * K.backend.mean(K.backend.log(1e-8 + y_pred), axis = 1), axis = 0)
+  return -K.backend.mean( K.backend.mean( q(real_input) * K.backend.log(1e-8 + y_pred), axis = 1), axis = 0)
 
 def entropy_loss(y_true, y_pred):
-  return -K.backend.mean( K.backend.mean(y_pred * K.backend.log(1e-8 + y_pred), axis = 1), axis = 0)
+  return -K.backend.mean( K.backend.mean( y_pred * K.backend.log(1e-8 + y_pred), axis = 1), axis = 0)
 
 class DMWGANGP(object):
   '''
@@ -399,7 +399,7 @@ class DMWGANGP(object):
     self.r.trainable = True
 
     cross_entropy_q_r_loss = partial(cross_entropy_q_r, q = self.q, real_input = self.real_input)
-    self.r_prior = Model([self.real_input, self.zc_input],
+    self.r_prior = Model([self.zc_input],
                          [self.r(self.zc_input), self.r(self.zc_input)],
                           name = "r_prior")
     self.r_prior.compile(loss = [cross_entropy_q_r_loss, entropy_loss],
@@ -519,7 +519,7 @@ class DMWGANGP(object):
       self.critic[0].trainable = False
       self.q.trainable = False
       self.r.trainable = True
-      self.r_prior.train_on_batch([x_batch, zc_batch],
+      self.r_prior.train_on_batch([zc_batch],
                                   [positive_y, positive_y],
                                   sample_weight = [positive_y, positive_y])
   
