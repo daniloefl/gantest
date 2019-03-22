@@ -55,14 +55,12 @@ def gradient_penalty_loss(y_true, y_pred, critic, generator, c, z, real, N, n_x,
 def wasserstein_loss(y_true, y_pred):
   return K.backend.mean(y_true*y_pred, axis = 0)
 
-def log_loss(y_true, y_pred):
-  return K.backend.mean(y_true*K.backend.log(1e-8 + y_pred), axis = 0)
-
-def cross_entropy_q_r(y_true, y_pred, q, real_input):
-  return -K.backend.mean( K.backend.mean( q(real_input) * K.backend.log(1e-8 + y_pred), axis = 1), axis = 0)
-
-def entropy_loss(y_true, y_pred):
-  return -K.backend.mean( K.backend.mean( y_pred * K.backend.log(1e-8 + y_pred), axis = 1), axis = 0)
+#def log_loss(y_true, y_pred):
+#  return K.backend.mean(y_true*K.backend.log(1e-8 + y_pred), axis = 0)
+#def cross_entropy_q_r(y_true, y_pred, q, real_input):
+#  return -K.backend.mean( K.backend.mean( q(real_input) * K.backend.log(1e-8 + y_pred), axis = 1), axis = 0)
+#def entropy_loss(y_true, y_pred):
+#  return -K.backend.mean( K.backend.mean( y_pred * K.backend.log(1e-8 + y_pred), axis = 1), axis = 0)
 
 class DMWGANGP(object):
   '''
@@ -360,6 +358,10 @@ class DMWGANGP(object):
                                   optimizer = Adam(lr = 1e-4, beta_1 = 0), metrics = [])
 
 
+    def entropy_q(x_in):
+      return - K.backend.mean(self.q(self.combined_generator(x_in)) * K.backend.log(1e-8 + self.q(self.combined_generator(x_in))), axis = -1, keepdims = False)
+    entropy_q_loss = K.layers.Lambda(entropy_q)([self.z_input, self.c_input])
+
     # create models to train the generators
     # add a entropy term for the encoder in it:
     self.gen_critic_fixed = {}
@@ -372,9 +374,9 @@ class DMWGANGP(object):
       self.q.trainable = False
       self.r.trainable = False
       self.gen_critic_fixed[i] = Model([self.z_input, self.c_input],
-                                       [self.critic[0](self.combined_generator([self.z_input, self.c_input])), self.q(self.combined_generator([self.z_input, self.c_input]))],
+                                       [self.critic[0](self.combined_generator([self.z_input, self.c_input])), entropy_q_loss],
                                        name = "gcf_%d" % i)
-      self.gen_critic_fixed[i].compile(loss = [wasserstein_loss, entropy_loss],
+      self.gen_critic_fixed[i].compile(loss = [wasserstein_loss, wasserstein_loss],
                                        loss_weights = [-1.0, self.lambda_enc],
                                        optimizer = Adam(lr = 1e-4, beta_1 = 0), metrics = [])
 
@@ -384,10 +386,11 @@ class DMWGANGP(object):
     self.critic[0].trainable = False
     self.q.trainable = True
     self.r.trainable = False
+
     self.q_generator = Model([self.z_input, self.c_input],
-                             [self.q(self.combined_generator([self.z_input, self.c_input]))],
+                             [entropy_q_loss],
                              name = "q_generator")
-    self.q_generator.compile(loss = [entropy_loss],
+    self.q_generator.compile(loss = [wasserstein_loss],
                              loss_weights = [-1.0],
                              optimizer = Adam(lr = 1e-4, beta_1 = 0), metrics = [])
 
@@ -398,12 +401,25 @@ class DMWGANGP(object):
     self.q.trainable = False
     self.r.trainable = True
 
-    cross_entropy_q_r_loss = partial(cross_entropy_q_r, q = self.q, real_input = self.real_input)
+    def cross_entropy_q_r(x_in):
+      res = self.q(x_in[0])
+      lres = K.backend.log(1e-8 + self.r(x_in[1]))
+      r = - K.backend.mean(res * lres, axis = -1, keepdims = False)
+      return r
+    cross_entropy_q_r_loss = K.layers.Lambda(cross_entropy_q_r)([self.real_input, self.zc_input])
+
+    #def entropy_r(x_in):
+    #  res = self.r(x_in[0])
+    #  lres = K.backend.log(1e-8 + res)
+    #  r = - K.backend.mean(res * lres, axis = -1, keepdims = False)
+    #  return r
+    #entropy_r_loss = K.layers.Lambda(entropy_r)([self.zc_input])
+
     self.r_prior = Model([self.real_input, self.zc_input],
-                         [self.r(self.zc_input), self.r(self.zc_input)],
+                         [cross_entropy_q_r_loss], #, entropy_r_loss],
                           name = "r_prior")
-    self.r_prior.compile(loss = [cross_entropy_q_r_loss, entropy_loss],
-                         loss_weights = [1.0, -self.lambda_entropy],
+    self.r_prior.compile(loss = [wasserstein_loss], #, wasserstein_loss],
+                         loss_weights = [1.0], #, -self.lambda_entropy],
                          optimizer = Adam(lr = 1e-4, beta_1 = 0), metrics = [])
 
   '''
@@ -467,6 +483,7 @@ class DMWGANGP(object):
     self.critic_loss_fake_train = np.array([])
     self.critic_loss_real_train = np.array([])
     positive_y = np.ones(self.n_batch)
+    null_target = np.eye(self.n_gens)[np.zeros(self.n_batch, dtype = np.int32)]
     for epoch in range(self.n_iteration):
       # step critic
       n_critic = self.n_critic
@@ -519,9 +536,8 @@ class DMWGANGP(object):
       self.critic[0].trainable = False
       self.q.trainable = False
       self.r.trainable = True
-      self.r_prior.train_on_batch([self.real_input, zc_batch],
-                                  [positive_y, positive_y],
-                                  sample_weight = [positive_y, positive_y])
+      self.r_prior.train_on_batch([x_batch, zc_batch],
+                                  [positive_y])
   
       if epoch % self.n_eval == 0:
         critic_metric_fake = 0
