@@ -483,7 +483,7 @@ class DMWGANGP(object):
           zc_batch = np.random.randint(low = 0, high = self.n_gens, size = (self.n_batch, 1))
 
           self.combined_generator.trainable = False
-          self.critic.trainable = True
+          self.critic[0].trainable = True
           critic_gradient_penalty += self.gen_fixed_critic.evaluate([x_batch, z_batch, zc_batch, positive_y],
                                                                     [positive_y, positive_y],
                                                                     sample_weight = [positive_y, positive_y], verbose = 0)[-1]
