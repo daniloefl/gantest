@@ -533,7 +533,7 @@ class DMWGANGP(object):
                                   [positive_y, positive_y])
   
       if epoch % 10 == 0:
-        K.backend.update(self.alpha, self.alpha.value()*0.5)
+        K.backend.update(self.alpha, K.backend.get_value(self.alpha)*0.5)
 
       if epoch % self.n_eval == 0:
         x_batch = self.get_batch(origin = 'test', size = 10*self.n_batch)
@@ -578,7 +578,12 @@ class DMWGANGP(object):
         floss.create_dataset('r_ent_loss', data = self.r_ent_loss_train)
         floss.close()
 
-        print("Batch %5d: L_{critic} = %5.3e ; L_{critic,fake} = %5.3e ; L_{critic,real} = %5.3e ; lambda_{gp} (|grad C| - 1)^2 = %5.3e ; L_q = %5.3e ; L_r = %5.3e ; L_{r,ent} = %5.3e" % (epoch, critic_metric, np.sum(critic_metric_fake), critic_metric_real, self.lambda_gp*critic_gradient_penalty, q_metric, r_metric, r_metric_ent))
+        print("Batch %5d: L_c = %5.3f ; L_{c,f} = %5.3f ; L_{c,r} = %5.3f ; L_{gp} = %5.3f ; L_q = %5.3f ; L_r = %5.3f ; L_{r,e} = %5.3f" % (epoch, critic_metric, np.sum(critic_metric_fake), critic_metric_real, self.lambda_gp*critic_gradient_penalty, q_metric, r_metric, r_metric_ent*self.lambda_entropy*K.backend.get_value(self.alpha)))
+        s = "           "
+        for i in range(self.n_gens):
+          s += "L_{c,f,%d} = %5.3f ; " % (i, critic_metric_fake[0,i])
+        print(s)
+
         self.save("%s/%s_generator_%d" % (network_dir, prefix, epoch), "%s/%s_critic_%d" % (network_dir, prefix, epoch), "%s/%s_q_%d" % (network_dir, prefix, epoch), "%s/%s_r_%d" % (network_dir, prefix, epoch))
       #gc.collect()
 
