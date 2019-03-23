@@ -539,7 +539,7 @@ class DMWGANGP(object):
         x_batch = self.get_batch(origin = 'test', size = 10*self.n_batch)
         z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (10*self.n_batch, self.n_dimensions))
         zc_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (10*self.n_batch, 1))
-        positive_y_l = np.zeros(10*self.n_batch)
+        positive_y_l = np.ones(10*self.n_batch)
         c_batch = self.r.predict(zc_batch, verbose = 0)
         tmp, critic_metric, critic_gradient_penalty = self.gen_fixed_critic.evaluate([x_batch, z_batch, c_batch, positive_y_l],
                                                                                      [positive_y_l, positive_y_l],
@@ -578,7 +578,7 @@ class DMWGANGP(object):
         floss.create_dataset('r_ent_loss', data = self.r_ent_loss_train)
         floss.close()
 
-        print("Batch %5d: L_{critic} = %5.3f ; L_{critic,fake} = %5.3f ; L_{critic,real} = %5.3f ; lambda_{gp} (|grad C| - 1)^2 = %5.3f ; L_q = %5.3f ; L_r = %5.3f ; L_{r,ent} = %5.3f" % (epoch, critic_metric, np.sum(critic_metric_fake), critic_metric_real, self.lambda_gp*critic_gradient_penalty, q_metric, r_metric, r_metric_ent))
+        print("Batch %5d: L_{critic} = %5.3e ; L_{critic,fake} = %5.3e ; L_{critic,real} = %5.3e ; lambda_{gp} (|grad C| - 1)^2 = %5.3e ; L_q = %5.3e ; L_r = %5.3e ; L_{r,ent} = %5.3e" % (epoch, critic_metric, np.sum(critic_metric_fake), critic_metric_real, self.lambda_gp*critic_gradient_penalty, q_metric, r_metric, r_metric_ent))
         self.save("%s/%s_generator_%d" % (network_dir, prefix, epoch), "%s/%s_critic_%d" % (network_dir, prefix, epoch), "%s/%s_q_%d" % (network_dir, prefix, epoch), "%s/%s_r_%d" % (network_dir, prefix, epoch))
       #gc.collect()
 
