@@ -49,18 +49,11 @@ def gradient_penalty_loss(y_true, y_pred, critic, generator, c, z, real, N, n_x,
   ## not needed as there is a single element in interp_input here (the discriminator output)
   ## the only dimension left is the batch, which we just average over in the last step
   slopes = K.backend.sqrt(1e-6 + K.backend.sum(K.backend.square(gradients), axis = [1]))
-  gp = K.backend.mean(K.backend.square(1 - slopes))
+  gp = K.backend.mean(K.backend.square(K.backend.max(slopes - 1, 0)))
   return gp
 
 def wasserstein_loss(y_true, y_pred):
   return K.backend.mean(y_true*y_pred, axis = 0)
-
-#def log_loss(y_true, y_pred):
-#  return K.backend.mean(y_true*K.backend.log(1e-8 + y_pred), axis = 0)
-#def cross_entropy_q_r(y_true, y_pred, q, real_input):
-#  return -K.backend.mean( K.backend.mean( q(real_input) * K.backend.log(1e-8 + y_pred), axis = 1), axis = 0)
-#def entropy_loss(y_true, y_pred):
-#  return -K.backend.mean( K.backend.mean( y_pred * K.backend.log(1e-8 + y_pred), axis = 1), axis = 0)
 
 class DMWGANGP(object):
   '''
@@ -103,7 +96,7 @@ class DMWGANGP(object):
                lambda_gp = 10.0,
                lambda_enc = 1.0,
                lambda_entropy = 1000.0,
-               n_eval = 10,
+               n_eval = 50,
                n_x = 28, n_y = 28,
                n_dimensions = 200,
                n_gens = 2):
@@ -278,6 +271,8 @@ class DMWGANGP(object):
     # create r if not loaded already
     self.create_r()
 
+    self.alpha = K.backend.variable(value = 1.0)
+
     print("Critic:")
     self.critic[0].trainable = True
     self.critic[0].summary()
@@ -340,8 +335,10 @@ class DMWGANGP(object):
                               n_x = self.n_x, n_y = self.n_y)
 
     # now use this combined generator to calculate the Wasserstein distance
-    wdistance = K.layers.Subtract()([self.critic[0](self.combined_generator([self.z_input, self.c_input])),
-                                     self.critic[0](self.real_input)])
+    wdistance = K.layers.Subtract()([
+                                     self.critic[0](self.real_input),
+                                     self.critic[0](self.combined_generator([self.z_input, self.c_input]))
+                                    ])
 
     # create model to train the critic
     for i in range(self.n_gens):
@@ -359,7 +356,7 @@ class DMWGANGP(object):
 
 
     def entropy_q(x_in):
-      return - K.backend.mean(self.q(self.combined_generator(x_in)) * K.backend.log(1e-8 + self.q(self.combined_generator(x_in))), axis = -1, keepdims = False)
+      return - K.backend.mean(self.q(self.combined_generator(x_in)) * K.backend.log(1e-8 + self.q(self.combined_generator(x_in))), axis = -1)
     entropy_q_loss = K.layers.Lambda(entropy_q)([self.z_input, self.c_input])
 
     # create models to train the generators
@@ -377,7 +374,7 @@ class DMWGANGP(object):
                                        [self.critic[0](self.combined_generator([self.z_input, self.c_input])), entropy_q_loss],
                                        name = "gcf_%d" % i)
       self.gen_critic_fixed[i].compile(loss = [wasserstein_loss, wasserstein_loss],
-                                       loss_weights = [-1.0, self.lambda_enc],
+                                       loss_weights = [1.0, self.lambda_enc],
                                        optimizer = Adam(lr = 1e-5, beta_1 = 0), metrics = [])
 
     for k in range(self.n_gens):
@@ -402,24 +399,18 @@ class DMWGANGP(object):
     self.r.trainable = True
 
     def cross_entropy_q_r(x_in):
-      res = self.q(x_in[0])
-      lres = K.backend.log(1e-8 + self.r(x_in[1]))
-      r = - K.backend.mean(res * lres, axis = -1, keepdims = False)
-      return r
+      return - K.backend.mean(self.q(x_in[0]) * K.backend.log(1e-8 + self.r(x_in[1])), axis = -1)
     cross_entropy_q_r_loss = K.layers.Lambda(cross_entropy_q_r)([self.real_input, self.zc_input])
 
     def entropy_r(x_in):
-      res = self.r(x_in[0])
-      lres = K.backend.log(1e-8 + self.r(x_in[1]))
-      r = - K.backend.mean(res * lres, axis = -1, keepdims = False)
-      return r
+      return - K.backend.mean(self.r(x_in[0]) * K.backend.log(1e-8 + self.r(x_in[1])), axis = -1)
     entropy_r_loss = K.layers.Lambda(entropy_r)([self.zc_input, self.zc_input])
 
     self.r_prior = Model([self.real_input, self.zc_input],
                          [cross_entropy_q_r_loss, entropy_r_loss],
                           name = "r_prior")
     self.r_prior.compile(loss = [wasserstein_loss, wasserstein_loss],
-                         loss_weights = [1.0, -self.lambda_entropy],
+                         loss_weights = [1.0, -self.lambda_entropy*self.alpha],
                          optimizer = Adam(lr = 1e-5, beta_1 = 0), metrics = [])
 
   '''
@@ -455,7 +446,7 @@ class DMWGANGP(object):
     import seaborn as sns
     fig, ax = plt.subplots(figsize = (20, 20), nrows = 5, ncols = 5)
     z = np.random.normal(loc = 0.0, scale = 1.0, size = (5*5, self.n_dimensions,))
-    zc = np.random.uniform(low = 0, high = self.n_gens, size = (5*5, 1))
+    zc = np.random.normal(loc = 0.0, scale = 1.0, size = (5*5, 1))
     c_b = self.r.predict(zc, verbose = 0)
     out = self.combined_generator.predict([z, c_b], verbose = 0)
     for i in range(5):
@@ -478,19 +469,22 @@ class DMWGANGP(object):
     # algorithm:
     # 0) Train adv. to guess fake vs real (freezing gen.)
     # 1) Train gen. to fool adv. (freezing adv.)
-    self.critic_gp_loss_train = np.array([])
     self.critic_loss_train = np.array([])
-    self.critic_loss_fake_train = np.array([])
+    self.critic_gp_loss_train = np.array([])
+    self.critic_loss_fake_train = np.zeros( (0, self.n_gens) )
     self.critic_loss_real_train = np.array([])
+    self.q_loss_train = np.array([])
+    self.r_loss_train = np.array([])
+    self.r_ent_loss_train = np.array([])
     positive_y = np.ones(self.n_batch)
-    null_target = np.eye(self.n_gens)[np.zeros(self.n_batch, dtype = np.int32)]
+    K.backend.update(self.alpha, 1.0)
     for epoch in range(self.n_iteration):
       # step critic
       n_critic = self.n_critic
       for k in range(0, n_critic):
         x_batch = self.get_batch(size = self.n_batch)
         z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
-        zc_batch = np.random.uniform(low = 0, high = self.n_gens, size = (self.n_batch, 1))
+        zc_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, 1))
         c_batch = self.r.predict(zc_batch, verbose = 0)
 
         self.combined_generator.trainable = False
@@ -498,12 +492,11 @@ class DMWGANGP(object):
         self.q.trainable = False
         self.r.trainable = False
         self.gen_fixed_critic.train_on_batch([x_batch, z_batch, c_batch, positive_y],
-                                              [positive_y, positive_y],
-                                              sample_weight = [positive_y, positive_y])
+                                              [positive_y, positive_y])
 
       x_batch = self.get_batch(size = self.n_batch)
       z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
-      zc_batch = np.random.uniform(low = 0, high = self.n_gens, size = (self.n_batch, 1))
+      zc_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, 1))
       c_batch = self.r.predict(zc_batch, verbose = 0)
       # step generator
       for i in range(0, self.n_gens):
@@ -515,8 +508,7 @@ class DMWGANGP(object):
         self.q.trainable = False
         self.r.trainable = False
         self.gen_critic_fixed[i].train_on_batch([z_batch, c_batch],
-                                                [positive_y, positive_y],
-                                                sample_weight = [positive_y, positive_y])
+                                                [positive_y, positive_y])
 
       # step q
       self.combined_generator.trainable = False
@@ -527,8 +519,7 @@ class DMWGANGP(object):
       self.q.trainable = True
       self.r.trainable = False
       self.q_generator.train_on_batch([z_batch, c_batch],
-                                      [positive_y],
-                                      sample_weight = [positive_y])
+                                      [positive_y])
 
       # step r
       self.combined_generator.trainable = False
@@ -541,53 +532,53 @@ class DMWGANGP(object):
       self.r_prior.train_on_batch([x_batch, zc_batch],
                                   [positive_y, positive_y])
   
+      if epoch % 10 == 0:
+        K.backend.update(self.alpha, self.alpha.value()*0.5)
+
       if epoch % self.n_eval == 0:
-        critic_metric_fake = 0
-        critic_metric_real = 0
-        c = 0.0
-        for k in range(32):
-          z = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
-          zc_batch = np.random.uniform(low = 0, high = self.n_gens, size = (self.n_batch, 1))
-          c_batch = self.r.predict(zc_batch, verbose = 0)
-          critic_metric_fake += np.mean(self.critic[0].predict(self.combined_generator.predict([z, c_batch], verbose = 0), verbose = 0))
-          c += 1.0
-        critic_metric_fake /= c
-        c = 0.0
-        for k in range(32):
-          x = self.get_batch(origin = 'test', size = self.n_batch)
-          critic_metric_real += np.mean(self.critic[0].predict(x))
-          c += 1.0
-        critic_metric_real /= c
-        critic_metric = critic_metric_fake - critic_metric_real
-        if critic_metric == 0: critic_metric = 1e-20
+        x_batch = self.get_batch(origin = 'test', size = 10*self.n_batch)
+        z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (10*self.n_batch, self.n_dimensions))
+        zc_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (10*self.n_batch, 1))
+        positive_y_l = np.zeros(10*self.n_batch)
+        c_batch = self.r.predict(zc_batch, verbose = 0)
+        tmp, critic_metric, critic_gradient_penalty = self.gen_fixed_critic.evaluate([x_batch, z_batch, c_batch, positive_y_l],
+                                                                                     [positive_y_l, positive_y_l],
+                                                                                     verbose = 0)
+        critic_metric_real = critic_metric
+        critic_metric_fake = np.zeros((1, self.n_gens))
+        for i in range(0, self.n_gens):
+          tmp, critic_metric_fake[0,i], tmp2 = self.gen_critic_fixed[i].evaluate([z_batch, c_batch],
+                                                                               [positive_y_l, positive_y_l],
+                                                                               verbose = 0)
+          critic_metric_real += critic_metric_fake[0,i]
 
-        critic_gradient_penalty = 0
-        for k in range(0, self.n_critic):
-          x_batch = self.get_batch(origin = 'test', size = self.n_batch)
-          z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
-          zc_batch = np.random.uniform(low = 0, high = self.n_gens, size = (self.n_batch, 1))
-          c_batch = self.r.predict(zc_batch, verbose = 0)
+        
+        q_metric = self.q_generator.evaluate([z_batch, c_batch],
+                                             [positive_y_l],
+                                             verbose = 0)
 
-          self.combined_generator.trainable = False
-          self.critic[0].trainable = True
-          critic_gradient_penalty += self.gen_fixed_critic.evaluate([x_batch, z_batch, c_batch, positive_y],
-                                                                    [positive_y, positive_y],
-                                                                    sample_weight = [positive_y, positive_y], verbose = 0)[-1]
-        critic_gradient_penalty /= float(self.n_critic)
-        if critic_gradient_penalty == 0: critic_gradient_penalty = 1e-20
-
+        tmp, r_metric, r_metric_ent = self.r_prior.evaluate([x_batch, zc_batch],
+                                                            [positive_y_l, positive_y_l],
+                                                            verbose = 0)
         self.critic_loss_train = np.append(self.critic_loss_train, [critic_metric])
-        self.critic_loss_fake_train = np.append(self.critic_loss_fake_train, [critic_metric_fake])
+        self.critic_loss_fake_train = np.append(self.critic_loss_fake_train, critic_metric_fake, axis = 0)
         self.critic_loss_real_train = np.append(self.critic_loss_real_train, [critic_metric_real])
         self.critic_gp_loss_train = np.append(self.critic_gp_loss_train, [critic_gradient_penalty])
+        self.q_loss_train = np.append(self.q_loss_train, [q_metric])
+        self.r_loss_train = np.append(self.r_loss_train, [r_metric])
+        self.r_ent_loss_train = np.append(self.r_ent_loss_train, [r_metric_ent])
+
         floss = h5py.File('%s/%s_loss.h5' % (result_dir, prefix), 'w')
         floss.create_dataset('critic_loss', data = self.critic_loss_train)
         floss.create_dataset('critic_loss_real', data = self.critic_loss_real_train)
         floss.create_dataset('critic_loss_fake', data = self.critic_loss_fake_train)
         floss.create_dataset('critic_gp_loss', data = self.critic_gp_loss_train)
+        floss.create_dataset('q_loss', data = self.q_loss_train)
+        floss.create_dataset('r_loss', data = self.r_loss_train)
+        floss.create_dataset('r_ent_loss', data = self.r_ent_loss_train)
         floss.close()
 
-        print("Batch %5d: L_{critic} = %10.7f ; L_{critic,fake} = %10.7f ; L_{critic,real} = %10.7f ; lambda_{gp} (|grad C| - 1)^2 = %10.7f" % (epoch, critic_metric, critic_metric_fake, critic_metric_real, self.lambda_gp*critic_gradient_penalty))
+        print("Batch %5d: L_{critic} = %5.3f ; L_{critic,fake} = %5.3f ; L_{critic,real} = %5.3f ; lambda_{gp} (|grad C| - 1)^2 = %5.3f ; L_q = %5.3f ; L_r = %5.3f ; L_{r,ent} = %5.3f" % (epoch, critic_metric, np.sum(critic_metric_fake), critic_metric_real, self.lambda_gp*critic_gradient_penalty, q_metric, r_metric, r_metric_ent))
         self.save("%s/%s_generator_%d" % (network_dir, prefix, epoch), "%s/%s_critic_%d" % (network_dir, prefix, epoch), "%s/%s_q_%d" % (network_dir, prefix, epoch), "%s/%s_r_%d" % (network_dir, prefix, epoch))
       #gc.collect()
 
@@ -599,6 +590,9 @@ class DMWGANGP(object):
     self.critic_loss_real_train = floss['critic_loss_real'][:]
     self.critic_loss_fake_train = floss['critic_loss_fake'][:]
     self.critic_gp_loss_train = floss['critic_gp_loss'][:]
+    self.q_loss_train = floss['q_loss'][:]
+    self.r_loss_train = floss['r_loss'][:]
+    self.r_ent_loss_train = floss['r_ent_loss'][:]
     self.n_iteration = self.n_eval*len(self.critic_loss_train)
     floss.close()
 
@@ -608,6 +602,9 @@ class DMWGANGP(object):
     it = np.arange(0, self.n_iteration, self.n_eval)
     plt.plot(it, smoothen(np.fabs(-self.critic_loss_train)), color = 'b', label = r' | $\mathcal{L}_{\mathrm{critic}} |$')
     plt.plot(it, smoothen(self.lambda_gp*self.critic_gp_loss_train), color = 'grey', label = r'$\lambda_{\mathrm{gp}} (||\nabla_{\hat{x}} C(\hat{x})||_{2} - 1)^2$')
+    plt.plot(it, smoothen(fabs(self.q_loss_train)), color = 'r', label = r' | $\mathcal{L}_{\mathrm{q}} |$')
+    plt.plot(it, smoothen(fabs(self.r_loss_train)), color = 'violet', label = r' | $\mathcal{L}_{\mathrm{r}} |$')
+    plt.plot(it, smoothen(fabs(self.r_ent_loss_train)), color = 'c', label = r' | $\mathcal{L}_{\mathrm{r,entropy}} |$')
     if nnTaken > 0:
       plt.axvline(x = nnTaken, color = 'r', linestyle = '--', label = 'Configuration taken for further analysis')
     ax.set(xlabel='Batches', ylabel='Loss', title='Training evolution');
@@ -623,8 +620,9 @@ class DMWGANGP(object):
       fac /= np.max(np.abs(self.critic_loss_fake_train))
     else:
       fac /= np.max(np.abs(self.critic_loss_real_train))
-    plt.plot(it, smoothen(fac*self.critic_loss_fake_train), color = 'g', label = r' $ %4.2f \mathcal{L}_{\mathrm{critic,fake}}$' % (fac) )
-    plt.plot(it, smoothen(-fac*self.critic_loss_real_train), color = 'c', label = r' $ %4.2f \mathcal{L}_{\mathrm{critic,real}}$' % (-fac) )
+    plt.plot(it, smoothen(-fac*self.critic_loss_real_train), color = 'c', label = r' $ %4.2f \mathcal{L}_{\mathrm{critic,real}}$' % (fac) )
+    for i in range(self.n_gens):
+      plt.plot(it, smoothen(fac*self.critic_loss_fake_train[:,i]), label = r' $ %4.2f \mathcal{L}_{\mathrm{critic,fake,%d}}$' % (-fac, i) )
     if nnTaken > 0:
       plt.axvline(x = nnTaken, color = 'r', linestyle = '--', label = 'Configuration taken for further analysis')
     ax.set(xlabel='Batches', ylabel='Loss', title='Training evolution');
@@ -632,6 +630,21 @@ class DMWGANGP(object):
     plt.legend(frameon = False)
     filename_crit = filename.replace('.pdf', '_critic_split.pdf')
     plt.savefig(filename_crit)
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+    it = np.arange(0, self.n_iteration, self.n_eval)
+    plt.plot(it, smoothen(fabs(self.q_loss_train)), color = 'r', label = r' | $\mathcal{L}_{\mathrm{q}} |$')
+    plt.plot(it, smoothen(fabs(self.r_loss_train)), color = 'violet', label = r' | $\mathcal{L}_{\mathrm{r}} |$')
+    plt.plot(it, smoothen(fabs(self.r_ent_loss_train)), color = 'c', label = r' | $\mathcal{L}_{\mathrm{r,entropy}} |$')
+    if nnTaken > 0:
+      plt.axvline(x = nnTaken, color = 'r', linestyle = '--', label = 'Configuration taken for further analysis')
+    ax.set(xlabel='Batches', ylabel='Loss', title='Training evolution');
+    ax.set_ylim([1e-1, 100])
+    ax.set_yscale('log')
+    plt.legend(frameon = False)
+    filename_others = filename.replace('.pdf', '_others.pdf')
+    plt.savefig(filename_others)
     plt.close(fig)
   
   def save(self, generator_filename, critic_filename, q_filename, r_filename):
