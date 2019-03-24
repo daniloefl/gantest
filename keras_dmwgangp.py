@@ -11,6 +11,7 @@ from __future__ import print_function
 import sys
 import os
 import gc
+import copy
 
 import matplotlib as mpl
 mpl.use('Agg')
@@ -367,7 +368,7 @@ class DMWGANGP(object):
         self.generator[k].trainable = False
         self.combined_generator.trainable = False
       self.critic[0].trainable = False
-      self.generator[k].trainable = True
+      self.generator[i].trainable = True
       self.q.trainable = False
       self.r.trainable = False
       self.gen_critic_fixed[i] = Model([self.z_input, self.c_input],
@@ -486,6 +487,8 @@ class DMWGANGP(object):
         z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
         zc_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, 1))
         c_batch = self.r.predict(zc_batch, verbose = 0)
+        c_batch = np.argmax(c_batch, axis = 1)
+        c_batch = np.eye(self.n_gens)[c_batch]
 
         self.combined_generator.trainable = False
         self.critic[0].trainable = True
@@ -498,6 +501,8 @@ class DMWGANGP(object):
       z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
       zc_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, 1))
       c_batch = self.r.predict(zc_batch, verbose = 0)
+      c_batch = np.argmax(c_batch, axis = 1)
+      c_batch = np.eye(self.n_gens)[c_batch]
       # step generator
       for i in range(0, self.n_gens):
         self.combined_generator.trainable = False
@@ -541,13 +546,17 @@ class DMWGANGP(object):
         zc_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (10*self.n_batch, 1))
         positive_y_l = np.ones(10*self.n_batch)
         c_batch = self.r.predict(zc_batch, verbose = 0)
+        c_batch = np.argmax(c_batch, axis = 1)
+        c_batch = np.eye(self.n_gens)[c_batch]
         tmp, critic_metric, critic_gradient_penalty = self.gen_fixed_critic.evaluate([x_batch, z_batch, c_batch, positive_y_l],
                                                                                      [positive_y_l, positive_y_l],
                                                                                      verbose = 0)
         critic_metric_real = critic_metric
         critic_metric_fake = np.zeros((1, self.n_gens))
         for i in range(0, self.n_gens):
-          tmp, critic_metric_fake[0,i], tmp2 = self.gen_critic_fixed[i].evaluate([z_batch, c_batch],
+          cs_batch = copy.deepcopy(c_batch)
+          cs_batch[:,[k for k in range(0, self.n_gens) if k != i]] = 0
+          tmp, critic_metric_fake[0,i], tmp2 = self.gen_critic_fixed[i].evaluate([z_batch, cs_batch],
                                                                                [positive_y_l, positive_y_l],
                                                                                verbose = 0)
           critic_metric_real += critic_metric_fake[0,i]
