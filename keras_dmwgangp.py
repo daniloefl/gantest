@@ -31,6 +31,7 @@ from keras.optimizers import Adam, SGD, RMSprop
 from keras.losses import binary_crossentropy, mean_squared_error
 
 import keras as K
+import tensorflow as tf
 from utils import LayerNormalization
 
 mnist = K.datasets.mnist
@@ -55,6 +56,62 @@ def gradient_penalty_loss(y_true, y_pred, critic, generator, c, z, real, N, n_x,
 
 def wasserstein_loss(y_true, y_pred):
   return K.backend.mean(y_true*y_pred, axis = 0)
+
+def dummy_loss(y_true, y_pred):
+  return y_pred
+
+
+class GenerateCategorical(K.layers.Layer):
+  def __init__(self,
+               N,
+               probs_initializer='ones',
+               probs_regularizer=None,
+               probs_constraint=None,
+               **kwargs):
+    '''
+        Generate categorical samples
+        :param probs_initializer: Initializer for the probs weight.
+        :param probs_regularizer: Optional regularizer for the probs weight.
+        :param probs_constraint: Optional constraint for the probs weight.
+        :param kwargs:
+    '''
+    super(GenerateCategorical, self).__init__(**kwargs)
+    self.N = N
+    self.probs_initializer = K.initializers.get(probs_initializer)
+    self.probs_regularizer = K.regularizers.get(probs_regularizer)
+    self.probs_constraint = K.constraints.get(probs_constraint)
+    self.probs = None
+
+  def get_config(self):
+    config = {
+            'probs_initializer': K.initializers.serialize(self.probs_initializer),
+            'probs_regularizer': K.initializers.serialize(self.probs_regularizer),
+            'probs_constraint': K.initializers.serialize(self.probs_constraint),
+        }
+    base_config = super(GenerateCategorical, self).get_config()
+    return dict(list(base_config.items()) + list(config.items()))
+
+  def compute_output_shape(self, input_shape):
+    return (input_shape[0], self.N)
+
+  def compute_mask(self, inputs, input_mask=None):
+    return input_mask
+
+  def build(self, input_shape):
+    self.probs = self.add_weight(
+        shape= (self.N,),
+        initializer=self.probs_initializer,
+        regularizer=self.probs_regularizer,
+        constraint=self.probs_constraint,
+        name='probs',
+    )
+    super(GenerateCategorical, self).build(input_shape)
+
+  def call(self, inputs, training=None):
+    tileprob = K.backend.reshape(tf.nn.softmax(self.probs), [1, -1])
+    samples = K.backend.reshape(tf.random.categorical(tf.log(tileprob), 1), (-1,))
+    one_hot = K.backend.one_hot(samples, self.N)
+    return one_hot
 
 class DMWGANGP(object):
   '''
@@ -147,7 +204,7 @@ class DMWGANGP(object):
     self.real_input = Input(shape = (self.n_x, self.n_y, 1), name = 'real_input')        # image input
 
     # input used to select generator
-    self.zc_input = Input(shape = (1,), name = 'zc_input')                               # latent variable to select generator (input of r)
+    self.zc_input = Input(shape = (1,), name = 'zc_input')                               # dummy input variable to select generator (input of r)
     self.c_input = Input(shape = (self.n_gens,), name = 'c_input')                       # one-hot variable used to select generator (output of r)
 
   '''
@@ -239,16 +296,15 @@ class DMWGANGP(object):
 
     self.q = Model(self.q_input, xc, name = "q")
     self.q.trainable = True
+    self.q.compile(loss = K.losses.mean_squared_error,
+                   optimizer = Adam(lr = 1e-4), metrics = [])
 
   def create_r(self):
     xc = self.r_input
 
-    xc = K.layers.Dense(128, activation = None)(xc)
-    xc = K.layers.LeakyReLU(0.2)(xc)
-    xc = K.layers.Dense(64, activation = None)(xc)
-    xc = K.layers.LeakyReLU(0.2)(xc)
-    xc = K.layers.Dense(self.n_gens, activation = None)(xc)
-    xc = K.layers.Softmax()(xc)
+    self.r_layer = GenerateCategorical(self.n_gens)
+    xc = self.r_layer(xc)
+    self.r_logits = self.r_layer.get_weights()[0]
 
     self.r = Model(self.r_input, xc, name = "r")
     self.r.trainable = True
@@ -268,6 +324,8 @@ class DMWGANGP(object):
 
     # create q if not loaded already
     self.create_q()
+    print("Q:")
+    self.q.summary()
 
     # create r if not loaded already
     self.create_r()
@@ -287,7 +345,7 @@ class DMWGANGP(object):
         self.generator[i].summary()
 
     # combine all generators scaled by a one hot encoded tensor to select the active one
-    # the combined generator, which just outputs the result of the selected generator, as given by self.zc_input,
+    # the combined generator, which just outputs the result of the selected generator
     # is stored in self.combined_generator
     for i in range(self.n_gens):
       self.generator[i].trainable = True
@@ -357,7 +415,7 @@ class DMWGANGP(object):
 
 
     def entropy_q(x_in):
-      return - K.backend.mean(self.q(self.combined_generator(x_in)) * K.backend.log(1e-8 + self.q(self.combined_generator(x_in))), axis = -1)
+      return - K.backend.sum(self.c_input * K.backend.log(1e-8 + self.q(self.combined_generator(x_in))), axis = -1)
     entropy_q_loss = K.layers.Lambda(entropy_q)([self.z_input, self.c_input])
 
     # create models to train the generators
@@ -389,7 +447,7 @@ class DMWGANGP(object):
                              [entropy_q_loss],
                              name = "q_generator")
     self.q_generator.compile(loss = [wasserstein_loss],
-                             loss_weights = [-1.0],
+                             loss_weights = [1.0], ### algorithm in app. A has a negative sign here, but code has the same sign as in gen_critic_fixed
                              optimizer = Adam(lr = 1e-3, beta_1 = 0), metrics = [])
 
     for k in range(self.n_gens):
@@ -400,17 +458,20 @@ class DMWGANGP(object):
     self.r.trainable = True
 
     def cross_entropy_q_r(x_in):
-      return - K.backend.mean(self.q(x_in[0]) * K.backend.log(1e-8 + self.r(x_in[1])), axis = -1)
-    cross_entropy_q_r_loss = K.layers.Lambda(cross_entropy_q_r)([self.real_input, self.zc_input])
+      tileprob = K.backend.reshape(tf.nn.softmax(self.r_logits), [1, -1])
+      log_prob = K.backend.log(1e-8 + tileprob)
+      q_out = self.q(x_in)
+      return - K.backend.mean(q_out * log_prob, axis = -1)
+    cross_entropy_q_r_loss = K.layers.Lambda(cross_entropy_q_r)([self.real_input])
 
     def entropy_r(x_in):
-      return - K.backend.mean(self.r(x_in[0]) * K.backend.log(1e-8 + self.r(x_in[1])), axis = -1)
-    entropy_r_loss = K.layers.Lambda(entropy_r)([self.zc_input, self.zc_input])
+      return - K.backend.sum(self.r_logits * K.backend.log(1e-8 + self.r_logits), axis = -1)
+    entropy_r_loss = K.layers.Lambda(entropy_r)([self.zc_input])
 
     self.r_prior = Model([self.real_input, self.zc_input],
                          [cross_entropy_q_r_loss, entropy_r_loss],
                           name = "r_prior")
-    self.r_prior.compile(loss = [wasserstein_loss, wasserstein_loss],
+    self.r_prior.compile(loss = [wasserstein_loss, dummy_loss],
                          loss_weights = [1.0, -self.lambda_entropy*self.alpha],
                          optimizer = Adam(lr = 1e-3, beta_1 = 0), metrics = [])
 
@@ -447,7 +508,7 @@ class DMWGANGP(object):
     import seaborn as sns
     fig, ax = plt.subplots(figsize = (20, 20), nrows = 5, ncols = 5)
     z = np.random.normal(loc = 0.0, scale = 1.0, size = (5*5, self.n_dimensions,))
-    zc = np.random.normal(loc = 0.0, scale = 1.0, size = (5*5, 1))
+    zc = np.ones( (5*5, 1) )  # dummy
     c_b = self.r.predict(zc, verbose = 0)
     out = self.combined_generator.predict([z, c_b], verbose = 0)
     for i in range(5):
@@ -485,7 +546,7 @@ class DMWGANGP(object):
       for k in range(0, n_critic):
         x_batch = self.get_batch(size = self.n_batch)
         z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
-        zc_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, 1))
+        zc_batch = positive_y # dummy
         c_batch = self.r.predict(zc_batch, verbose = 0)
         c_batch = np.argmax(c_batch, axis = 1)
         c_batch = np.eye(self.n_gens)[c_batch]
@@ -499,7 +560,7 @@ class DMWGANGP(object):
 
       x_batch = self.get_batch(size = self.n_batch)
       z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
-      zc_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, 1))
+      zc_batch = positive_y # dummy
       c_batch = self.r.predict(zc_batch, verbose = 0)
       c_batch = np.argmax(c_batch, axis = 1)
       c_batch = np.eye(self.n_gens)[c_batch]
@@ -543,8 +604,8 @@ class DMWGANGP(object):
       if epoch % self.n_eval == 0:
         x_batch = self.get_batch(origin = 'test', size = 10*self.n_batch)
         z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (10*self.n_batch, self.n_dimensions))
-        zc_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (10*self.n_batch, 1))
         positive_y_l = np.ones(10*self.n_batch)
+        zc_batch = positive_y_l # dummy
         c_batch = self.r.predict(zc_batch, verbose = 0)
         c_batch = np.argmax(c_batch, axis = 1)
         c_batch = np.eye(self.n_gens)[c_batch]
