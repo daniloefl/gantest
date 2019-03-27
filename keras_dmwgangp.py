@@ -159,17 +159,23 @@ class DMWGANGP(object):
 
     xc = self.critic_input
 
+    xc = K.layers.Conv2D(32, (3,3), padding = "same", activation = None)(xc)
+    xc = K.layers.LeakyReLU(0.2)(xc)
     xc = K.layers.Conv2D(16, (3,3), padding = "same", activation = None)(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
     xc = K.layers.MaxPooling2D(pool_size = (2, 2), name = "adv_2")(xc)
     #xc = K.layers.Dropout(0.5)(xc)
 
+    xc = K.layers.Conv2D(32, (3,3), padding = "same", activation = None)(xc)
+    xc = K.layers.LeakyReLU(0.2)(xc)
     xc = K.layers.Conv2D(16, (3,3), padding = "same", activation = None)(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
     xc = K.layers.MaxPooling2D(pool_size = (2, 2))(xc)
     #xc = K.layers.Dropout(0.5)(xc)
 
     xc = K.layers.Flatten()(xc)
+    xc = K.layers.Dense(512, activation = None)(xc)
+    xc = K.layers.LeakyReLU(0.2)(xc)
     xc = K.layers.Dense(128, activation = None)(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
     xc = K.layers.Dense(64, activation = None)(xc)
@@ -178,8 +184,6 @@ class DMWGANGP(object):
 
     self.critic[n] = Model(self.critic_input, xc, name = "c_%d" % n)
     self.critic[n].trainable = True
-    self.critic[n].compile(loss = wasserstein_loss,
-                           optimizer = Adam(lr = 1e-4), metrics = [])
 
   '''
   Create a new generator network.
@@ -235,8 +239,6 @@ class DMWGANGP(object):
 
     self.q = Model(self.q_input, xc, name = "q")
     self.q.trainable = True
-    self.q.compile(loss = K.losses.categorical_crossentropy,
-                   optimizer = Adam(lr = 1e-4), metrics = [])
 
   def create_r(self):
     xc = self.r_input
@@ -250,8 +252,6 @@ class DMWGANGP(object):
 
     self.r = Model(self.r_input, xc, name = "r")
     self.r.trainable = True
-    self.r.compile(loss = K.losses.categorical_crossentropy,
-                   optimizer = Adam(lr = 1e-4), metrics = [])
 
   '''
   Create all networks.
@@ -353,7 +353,7 @@ class DMWGANGP(object):
                                   name = "gfc")
     self.gen_fixed_critic.compile(loss = [wasserstein_loss, partial_gp_loss],
                                   loss_weights = [1.0, self.lambda_gp],
-                                  optimizer = Adam(lr = 1e-5, beta_1 = 0), metrics = [])
+                                  optimizer = Adam(lr = 1e-4), metrics = [])
 
 
     def entropy_q(x_in):
@@ -376,7 +376,7 @@ class DMWGANGP(object):
                                        name = "gcf_%d" % i)
       self.gen_critic_fixed[i].compile(loss = [wasserstein_loss, wasserstein_loss],
                                        loss_weights = [1.0, self.lambda_enc],
-                                       optimizer = Adam(lr = 1e-5, beta_1 = 0), metrics = [])
+                                       optimizer = Adam(lr = 1e-4), metrics = [])
 
     for k in range(self.n_gens):
       self.generator[k].trainable = False
@@ -390,7 +390,7 @@ class DMWGANGP(object):
                              name = "q_generator")
     self.q_generator.compile(loss = [wasserstein_loss],
                              loss_weights = [-1.0],
-                             optimizer = Adam(lr = 1e-5, beta_1 = 0), metrics = [])
+                             optimizer = Adam(lr = 1e-3, beta_1 = 0), metrics = [])
 
     for k in range(self.n_gens):
       self.generator[k].trainable = False
@@ -412,7 +412,7 @@ class DMWGANGP(object):
                           name = "r_prior")
     self.r_prior.compile(loss = [wasserstein_loss, wasserstein_loss],
                          loss_weights = [1.0, -self.lambda_entropy*self.alpha],
-                         optimizer = Adam(lr = 1e-5, beta_1 = 0), metrics = [])
+                         optimizer = Adam(lr = 1e-3, beta_1 = 0), metrics = [])
 
   '''
     Read data and put it in x_train and x_test after minor preprocessing.
