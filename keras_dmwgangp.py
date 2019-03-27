@@ -448,7 +448,7 @@ class DMWGANGP(object):
                              name = "q_generator")
     self.q_generator.compile(loss = [wasserstein_loss],
                              loss_weights = [1.0], ### algorithm in app. A has a negative sign here, but code has the same sign as in gen_critic_fixed
-                             optimizer = Adam(lr = 1e-3, beta_1 = 0), metrics = [])
+                             optimizer = Adam(lr = 1e-4), metrics = [])
 
     for k in range(self.n_gens):
       self.generator[k].trainable = False
@@ -465,7 +465,7 @@ class DMWGANGP(object):
     cross_entropy_q_r_loss = K.layers.Lambda(cross_entropy_q_r)([self.real_input])
 
     def entropy_r(x_in):
-      return - K.backend.sum(self.r_logits * K.backend.log(1e-8 + self.r_logits), axis = -1)
+      return - K.backend.sum(tf.nn.softmax(self.r_logits) * K.backend.log(1e-8 + tf.nn.softmax(self.r_logits)), axis = -1)
     entropy_r_loss = K.layers.Lambda(entropy_r)([self.zc_input])
 
     self.r_prior = Model([self.real_input, self.zc_input],
@@ -473,7 +473,7 @@ class DMWGANGP(object):
                           name = "r_prior")
     self.r_prior.compile(loss = [wasserstein_loss, dummy_loss],
                          loss_weights = [1.0, -self.lambda_entropy*self.alpha],
-                         optimizer = Adam(lr = 1e-3, beta_1 = 0), metrics = [])
+                         optimizer = Adam(lr = 1e-4), metrics = [])
 
   '''
     Read data and put it in x_train and x_test after minor preprocessing.
