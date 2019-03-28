@@ -415,7 +415,7 @@ class DMWGANGP(object):
 
 
     def entropy_q(x_in):
-      return - K.backend.sum(self.c_input * K.backend.log(1e-8 + self.q(self.combined_generator(x_in))), axis = -1)
+      return - K.backend.sum(K.backend.log(1e-8 + self.q(self.combined_generator(x_in))), axis = -1)
     entropy_q_loss = K.layers.Lambda(entropy_q)([self.z_input, self.c_input])
 
     # create models to train the generators
