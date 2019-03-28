@@ -585,6 +585,8 @@ class DMWGANGP(object):
       c_batch = np.eye(self.n_gens)[c_batch]
       # step generator
       for i in range(0, self.n_gens):
+        cs_batch = copy.deepcopy(c_batch)
+        cs_batch[:,[k for k in range(0, self.n_gens) if k != i]] = 0
         self.combined_generator.trainable = False
         for k in range(0, self.n_gens):
           self.generator[k].trainable = False
@@ -592,8 +594,8 @@ class DMWGANGP(object):
         self.critic[0].trainable = False
         self.q.trainable = False
         self.r.trainable = False
-        self.gen_critic_fixed[i].train_on_batch([z_batch, c_batch],
-                                                [positive_y, c_batch])
+        self.gen_critic_fixed[i].train_on_batch([z_batch, cs_batch],
+                                                [positive_y, cs_batch])
 
       # step q
       self.combined_generator.trainable = False
