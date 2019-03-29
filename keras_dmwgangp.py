@@ -256,6 +256,8 @@ class DMWGANGP(object):
 
     xg = K.layers.Dense(512, activation = None)(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
+    xg = K.layers.Dense(256, activation = None)(xg)
+    xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Dense(128, activation = None)(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Dense(self.n_x*self.n_y*1, activation = None)(xg)
@@ -266,7 +268,11 @@ class DMWGANGP(object):
 
     xg = K.layers.Conv2DTranspose(32, (3,3), padding = "same", activation = None)(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
+    xg = K.layers.Conv2DTranspose(32, (3,3), padding = "same", activation = None)(xg)
+    xg = K.layers.LeakyReLU(0.2)(xg)
 
+    xg = K.layers.Conv2DTranspose(16, (3,3), padding = "same", activation = None)(xg)
+    xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Conv2DTranspose(16, (3,3), padding = "same", activation = None)(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     #xg = K.layers.Dropout(0.5)(xg)
@@ -469,7 +475,7 @@ class DMWGANGP(object):
                              name = "q_generator")
     self.q_generator.compile(loss = [K.losses.categorical_crossentropy],
                              loss_weights = [1.0], ### algorithm in app. A has a negative sign here, but code has the same sign as in gen_critic_fixed
-                             optimizer = Adam(lr = 1e-4), metrics = [])
+                             optimizer = Adam(lr = 1e-3), metrics = [])
 
     for k in range(self.n_gens):
       self.generator[k].trainable = False
@@ -511,7 +517,7 @@ class DMWGANGP(object):
                           name = "r_prior")
     self.r_prior.compile(loss = [cross_entropy_q_r_loss_k_partial, entropy_r_loss_k],
                          loss_weights = [1.0, -self.lambda_entropy],
-                         optimizer = Adam(lr = 1e-4), metrics = [])
+                         optimizer = Adam(lr = 1e-3), metrics = [])
 
   '''
     Read data and put it in x_train and x_test after minor preprocessing.
@@ -647,7 +653,7 @@ class DMWGANGP(object):
       self.r_prior.train_on_batch([x_batch, zc_batch],
                                   [c_batch, c_batch])
   
-      if epoch % 10 == 0:
+      if epoch % 50 == 0:
         K.backend.set_value(self.alpha, K.backend.get_value(self.alpha)*0.5)
 
       if epoch % self.n_eval == 0:
@@ -699,7 +705,7 @@ class DMWGANGP(object):
         floss.create_dataset('r_ent_loss', data = self.r_ent_loss_train)
         floss.close()
 
-        print("Batch %5d: L_c = %5.3f ; L_{c,f} = %5.3f ; L_{c,r} = %5.3f ; L_{gp} = %5.3f ; L_q = %5.3f ; L_r = %5.3f ; L_{r,e} = %5.3f" % (epoch, critic_metric, np.sum(critic_metric_fake), critic_metric_real, self.lambda_gp*critic_gradient_penalty, q_metric, r_metric, r_metric_ent*self.lambda_entropy))
+        print("Batch %5d: L_c = %5.3f ; L_{c,f} = %5.3f ; L_{c,r} = %5.3f ; L_{gp} = %5.3f ; L_q = %5.3e ; L_r = %5.3e ; L_{r,e} = %5.3e" % (epoch, critic_metric, np.sum(critic_metric_fake), critic_metric_real, self.lambda_gp*critic_gradient_penalty, q_metric, r_metric, r_metric_ent*self.lambda_entropy))
         s = "           "
         for i in range(self.n_gens):
           s += "L_{c,f,%d} = %5.3f ; " % (i, critic_metric_fake[0,i])
