@@ -463,7 +463,7 @@ class DMWGANGP(object):
                              [self.q(self.combined_generator([self.z_input, self.c_input]))],
                              name = "q_generator")
     self.q_generator.compile(loss = [K.losses.categorical_crossentropy],
-                             loss_weights = [-1.0], ### algorithm in app. A has a negative sign here, but code has the same sign as in gen_critic_fixed
+                             loss_weights = [1.0], ### algorithm in app. A has a negative sign here, but code has the same sign as in gen_critic_fixed
                              optimizer = Adam(lr = 1e-4), metrics = [])
 
     for k in range(self.n_gens):
