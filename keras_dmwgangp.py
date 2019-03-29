@@ -45,7 +45,7 @@ def gradient_penalty_loss(y_true, y_pred, critic, generator, c, z, real, N, n_x,
   d1 = generator([z, c])
   d2 = real
   diff = d2 - d1
-  epsilon = K.backend.random_uniform_variable(shape=[N, n_x, n_y, 1], low = 0., high = 1.)
+  epsilon = K.backend.random_uniform_variable(shape=[N, 1, 1, 1], low = 0., high = 1.)
   interp_input = d1 + (epsilon*diff)
   gradients = K.backend.gradients(critic(interp_input), [interp_input])[0]
   ## not needed as there is a single element in interp_input here (the discriminator output)
@@ -108,11 +108,13 @@ class GenerateCategorical(K.layers.Layer):
     super(GenerateCategorical, self).build(input_shape)
 
   def call(self, inputs, training=None):
+    # this samples, but it is not differentiable ...
     Nbatch = K.backend.shape(inputs)[0]
-    tileprob = K.backend.reshape(tf.nn.softmax(self.probs), [1, -1])
-    samples = K.backend.reshape(tf.random.categorical(tf.log(tileprob), Nbatch), (-1,))
-    one_hot = K.backend.one_hot(samples, self.N)
-    return one_hot
+    return K.backend.tile(K.backend.reshape(tf.nn.softmax(self.probs), [1, -1]), [Nbatch, 1])
+    #tileprob = K.backend.reshape(self.probs, [1, -1])
+    #samples = K.backend.reshape(tf.random.categorical(tf.log(tileprob), Nbatch), (-1,))
+    #one_hot = K.backend.one_hot(samples, self.N)
+    #return one_hot
 
 class DMWGANGP(object):
   '''
@@ -339,6 +341,9 @@ class DMWGANGP(object):
     # create r if not loaded already
     self.create_r()
 
+    print("R:")
+    self.r.summary()
+
     self.alpha = K.backend.variable(value = 1.0)
 
     print("Critic:")
@@ -473,24 +478,38 @@ class DMWGANGP(object):
     self.q.trainable = False
     self.r.trainable = True
 
-    def cross_entropy_q_r(x_in):
-      tileprob = K.backend.reshape(tf.nn.softmax(self.r_logits), [1, -1])
-      tileprob = K.backend.clip(tileprob, K.backend.epsilon(), 1 - K.backend.epsilon())
-      log_prob = K.backend.log(tileprob)
-      q_out = self.q(x_in)
-      return - K.backend.sum(q_out * log_prob, axis = -1)
-    cross_entropy_q_r_loss = K.layers.Lambda(cross_entropy_q_r)([self.real_input])
+    #def cross_entropy_q_r(x_in):
+    #  tileprob = K.backend.reshape(tf.nn.softmax(self.r_logits), [1, -1])
+    #  tileprob = K.backend.clip(tileprob, K.backend.epsilon(), 1 - K.backend.epsilon())
+    #  log_prob = K.backend.log(tileprob)
+    #  q_out = self.q(x_in)
+    #  return - K.backend.sum(q_out * log_prob, axis = -1)
+    #cross_entropy_q_r_loss = K.layers.Lambda(cross_entropy_q_r)([self.real_input])
 
-    def entropy_r(x_in):
-      r_prob = tf.nn.softmax(self.r_logits)
-      r_prob = K.backend.clip(r_prob, K.backend.epsilon(), 1 - K.backend.epsilon())
-      return - self.alpha*K.backend.sum(r_prob * K.backend.log(r_prob), axis = -1)
-    entropy_r_loss = K.layers.Lambda(entropy_r)([self.zc_input])
+    #def entropy_r(x_in):
+    #  r_prob = tf.nn.softmax(self.r_logits)
+    #  r_prob = K.backend.clip(r_prob, K.backend.epsilon(), 1 - K.backend.epsilon())
+    #  return - self.alpha*K.backend.sum(r_prob * K.backend.log(r_prob), axis = -1)
+    #entropy_r_loss = K.layers.Lambda(entropy_r)([self.zc_input])
+
+    def cross_entropy_q_r_loss_k(y_true, y_pred, q, real_input):
+      rprob = y_pred                            # prob. of each category from r weight
+      rprob = K.backend.clip(rprob, K.backend.epsilon(), 1 - K.backend.epsilon()) # avoid zero and 1 probabilities to avoid nans in log
+      log_prob = K.backend.log(rprob) # take log
+      q_out = q(real_input) # this is an (Nbatch, n_gens) shaped vector with the probability for each class, given input image
+      cross_entropy_q_r = q_out * log_prob # this has shape (Nbatch, n_gens), with each column of q scaled by the r probability
+      return K.backend.mean( - K.backend.sum(cross_entropy_q_r, axis = -1), axis = 0) # sum over columns to get the cross entropy per image and average over batch
+    cross_entropy_q_r_loss_k_partial = partial(cross_entropy_q_r_loss_k, q = self.q, real_input = self.real_input)
+
+    def entropy_r_loss_k(y_true, y_pred):
+      rprob = y_pred
+      rprob = K.backend.clip(rprob, K.backend.epsilon(), 1 - K.backend.epsilon())
+      return - self.alpha*K.backend.mean(K.backend.sum(rprob * K.backend.log(rprob), axis = -1), axis = 0)
 
     self.r_prior = Model([self.real_input, self.zc_input],
-                         [cross_entropy_q_r_loss, entropy_r_loss],
+                         [self.r(self.zc_input), self.r(self.zc_input)],
                           name = "r_prior")
-    self.r_prior.compile(loss = [wasserstein_loss, dummy_loss],
+    self.r_prior.compile(loss = [cross_entropy_q_r_loss_k_partial, entropy_r_loss_k],
                          loss_weights = [1.0, -self.lambda_entropy],
                          optimizer = Adam(lr = 1e-4), metrics = [])
 
@@ -527,8 +546,13 @@ class DMWGANGP(object):
     import seaborn as sns
     fig, ax = plt.subplots(figsize = (20, 20), nrows = 5, ncols = 5)
     z = np.random.normal(loc = 0.0, scale = 1.0, size = (5*5, self.n_dimensions,))
-    zc = np.ones( (5*5, 1) )  # dummy
+    zc = np.ones( (self.n_gens, 1) )  # dummy
     c_b = self.r.predict(zc, verbose = 0)
+    # if r returns probabilities:
+    c_b = np.random.choice(self.n_gens, size = 5*5, p = c_b[0,:])
+    # if r samples:
+    #c_batch = np.argmax(c_b, axis = 1)
+    c_b = np.eye(self.n_gens)[c_b]
     out = self.combined_generator.predict([z, c_b], verbose = 0)
     for i in range(5):
       for j in range(5):
@@ -565,9 +589,12 @@ class DMWGANGP(object):
       for k in range(0, n_critic):
         x_batch = self.get_batch(size = self.n_batch)
         z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
-        zc_batch = positive_y # dummy
+        zc_batch = np.ones( (self.n_batch, 1) ) # dummy
         c_batch = self.r.predict(zc_batch, verbose = 0)
-        c_batch = np.argmax(c_batch, axis = 1)
+        # if r returns probabilities:
+        c_batch = np.random.choice(self.n_gens, size = self.n_batch, p = c_batch[0,:])
+        # if r samples:
+        #c_batch = np.argmax(c_batch, axis = 1)
         c_batch = np.eye(self.n_gens)[c_batch]
 
         self.combined_generator.trainable = False
@@ -579,9 +606,12 @@ class DMWGANGP(object):
 
       x_batch = self.get_batch(size = self.n_batch)
       z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
-      zc_batch = positive_y # dummy
+      zc_batch = np.ones( (self.n_batch, 1) ) # dummy
       c_batch = self.r.predict(zc_batch, verbose = 0)
-      c_batch = np.argmax(c_batch, axis = 1)
+      # if r returns probabilities:
+      c_batch = np.random.choice(self.n_gens, size = self.n_batch, p = c_batch[0,:])
+      # if r samples:
+      #c_batch = np.argmax(c_batch, axis = 1)
       c_batch = np.eye(self.n_gens)[c_batch]
       # step generator
       for i in range(0, self.n_gens):
@@ -615,7 +645,7 @@ class DMWGANGP(object):
       self.q.trainable = False
       self.r.trainable = True
       self.r_prior.train_on_batch([x_batch, zc_batch],
-                                  [positive_y, positive_y])
+                                  [c_batch, c_batch])
   
       if epoch % 10 == 0:
         K.backend.set_value(self.alpha, K.backend.get_value(self.alpha)*0.5)
@@ -624,9 +654,12 @@ class DMWGANGP(object):
         x_batch = self.get_batch(origin = 'test', size = 10*self.n_batch)
         z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (10*self.n_batch, self.n_dimensions))
         positive_y_l = np.ones(10*self.n_batch)
-        zc_batch = positive_y_l # dummy
+        zc_batch = np.ones( (10*self.n_batch, 1) ) # dummy
         c_batch = self.r.predict(zc_batch, verbose = 0)
-        c_batch = np.argmax(c_batch, axis = 1)
+        # if r returns probabilities:
+        c_batch = np.random.choice(self.n_gens, size = 10*self.n_batch, p = c_batch[0,:])
+        # if r samples:
+        #c_batch = np.argmax(c_batch, axis = 1)
         c_batch = np.eye(self.n_gens)[c_batch]
         tmp, critic_metric, critic_gradient_penalty = self.gen_fixed_critic.evaluate([x_batch, z_batch, c_batch, positive_y_l],
                                                                                      [positive_y_l, positive_y_l],
@@ -646,7 +679,7 @@ class DMWGANGP(object):
                                              verbose = 0)
 
         tmp, r_metric, r_metric_ent = self.r_prior.evaluate([x_batch, zc_batch],
-                                                            [positive_y_l, positive_y_l],
+                                                            [c_batch, c_batch],
                                                             verbose = 0)
         self.critic_loss_train = np.append(self.critic_loss_train, [critic_metric])
         self.critic_loss_fake_train = np.append(self.critic_loss_fake_train, critic_metric_fake, axis = 0)

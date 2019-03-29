@@ -43,7 +43,7 @@ def gradient_penalty_loss(y_true, y_pred, critic, generator, z, real, N, n_x, n_
   d1 = generator(z)
   d2 = real
   diff = d2 - d1
-  epsilon = K.backend.random_uniform_variable(shape=[N, n_x, n_y, 1], low = 0., high = 1.)
+  epsilon = K.backend.random_uniform_variable(shape=[N, 1, 1, 1], low = 0., high = 1.)
   interp_input = d1 + (epsilon*diff)
   gradients = K.backend.gradients(critic(interp_input), [interp_input])[0]
   ## not needed as there is a single element in interp_input here (the discriminator output)
