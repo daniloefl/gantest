@@ -84,6 +84,8 @@ class GenerateCategorical(K.layers.Layer):
 
   def get_config(self):
     config = {
+            'N': self.N,
+            'probs': self.probs,
             'probs_initializer': K.initializers.serialize(self.probs_initializer),
             'probs_regularizer': K.initializers.serialize(self.probs_regularizer),
             'probs_constraint': K.initializers.serialize(self.probs_constraint),
@@ -475,7 +477,7 @@ class DMWGANGP(object):
                              name = "q_generator")
     self.q_generator.compile(loss = [K.losses.categorical_crossentropy],
                              loss_weights = [1.0], ### algorithm in app. A has a negative sign here, but code has the same sign as in gen_critic_fixed
-                             optimizer = Adam(lr = 1e-3), metrics = [])
+                             optimizer = Adam(lr = 1e-4), metrics = [])
 
     for k in range(self.n_gens):
       self.generator[k].trainable = False
@@ -517,7 +519,7 @@ class DMWGANGP(object):
                           name = "r_prior")
     self.r_prior.compile(loss = [cross_entropy_q_r_loss_k_partial, entropy_r_loss_k],
                          loss_weights = [1.0, -self.lambda_entropy],
-                         optimizer = Adam(lr = 1e-3), metrics = [])
+                         optimizer = Adam(lr = 1e-4), metrics = [])
 
   '''
     Read data and put it in x_train and x_test after minor preprocessing.
@@ -838,7 +840,7 @@ class DMWGANGP(object):
     json_file = open('%s.json' % r_filename, 'r')
     loaded_model_json = json_file.read()
     json_file.close()
-    self.r = K.models.model_from_json(loaded_model_json, custom_objects = {'LayerNormalization': LayerNormalization})
+    self.r = K.models.model_from_json(loaded_model_json, custom_objects = {'LayerNormalization': LayerNormalization, 'GenerateCategorical': GenerateCategorical})
     self.r.load_weights("%s.h5" % r_filename)
     self.r.compile(loss = categorical_crossentropy,
                    optimizer = K.optimizers.Adam(lr = 1e-4), metrics = [])
