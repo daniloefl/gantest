@@ -31,6 +31,7 @@ from keras.losses import binary_crossentropy, mean_squared_error
 
 import keras as K
 from utils import LayerNormalization
+import tensorflow as tf
 
 mnist = K.datasets.mnist
 
