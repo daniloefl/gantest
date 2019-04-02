@@ -42,10 +42,12 @@ def smoothen(y):
   return np.convolve(y, box, mode = 'same')
 
 def gradient_penalty_loss(y_true, y_pred, critic, generator, c, z, real, N, n_x, n_y):
+  Ns = K.backend.shape(real)[0]
   d1 = generator([z, c])
   d2 = real
   diff = d2 - d1
-  epsilon = K.backend.random_uniform_variable(shape=[N, 1, 1, 1], low = 0., high = 1.)
+  #epsilon = K.backend.random_uniform_variable(shape=[Ns, 1, 1, 1], low = 0., high = 1.)
+  epsilon = tf.random.uniform(shape=[Ns, 1, 1, 1], minval = 0., maxval = 1.)
   interp_input = d1 + (epsilon*diff)
   gradients = K.backend.gradients(critic(interp_input), [interp_input])[0]
   ## not needed as there is a single element in interp_input here (the discriminator output)
@@ -84,7 +86,6 @@ class GenerateCategorical(K.layers.Layer):
 
   def get_config(self):
     config = {
-            'N': self.N,
             'probs': self.probs,
             'probs_initializer': K.initializers.serialize(self.probs_initializer),
             'probs_regularizer': K.initializers.serialize(self.probs_regularizer),
@@ -94,7 +95,7 @@ class GenerateCategorical(K.layers.Layer):
     return dict(list(base_config.items()) + list(config.items()))
 
   def compute_output_shape(self, input_shape):
-    return (input_shape[0], self.N)
+    return (input_shape[0], self.probs.shape[0])
 
   def compute_mask(self, inputs, input_mask=None):
     return input_mask
@@ -155,7 +156,7 @@ class DMWGANGP(object):
   '''
 
   def __init__(self, n_iteration = 30000, n_critic = 5,
-               n_batch = 32,
+               n_batch = 128,
                lambda_gp = 10.0,
                lambda_enc = 1.0,
                lambda_entropy = 1000.0,
