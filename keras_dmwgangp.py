@@ -86,7 +86,6 @@ class GenerateCategorical(K.layers.Layer):
 
   def get_config(self):
     config = {
-            'probs': self.probs,
             'probs_initializer': K.initializers.serialize(self.probs_initializer),
             'probs_regularizer': K.initializers.serialize(self.probs_regularizer),
             'probs_constraint': K.initializers.serialize(self.probs_constraint),
