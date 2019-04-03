@@ -380,13 +380,14 @@ class DMWGANGP(object):
 
     def combine_gens(x_in):
       x = list(x_in)
-      c_input = K.backend.reshape(K.backend.argmax(x[0], axis = 1), [-1, 1])
+      #c_input = K.backend.reshape(K.backend.argmax(x[0], axis = 1), [-1, 1])
+      #c_one_hot = K.backend.one_hot(c_input, self.n_gens)
+      c_one_hot = x[0]
       list_generator = x[1:]
-      c_one_hot = K.backend.one_hot(c_input, self.n_gens)
-      c_map = K.backend.tile(c_one_hot, [1, 1, self.n_x*self.n_y*1])
-      c_map_reshape = K.backend.reshape(c_map, [-1, self.n_gens, self.n_x, self.n_y, 1])
-      g_stack = K.backend.stack(list_generator, axis = 1)
-      gen_sum = K.backend.sum(g_stack * c_map_reshape, axis = 1)
+      c_map = tf.tile(tf.reshape(c_one_hot, [-1, self.n_gens, 1]), [1, 1, self.n_x*self.n_y*1])
+      c_map_reshape = tf.reshape(c_map, [-1, self.n_gens, self.n_x, self.n_y, 1])
+      g_stack = tf.stack(list_generator, axis = 1)
+      gen_sum = tf.reduce_sum(g_stack * c_map_reshape, axis = 1)
       return gen_sum
 
     comb_in = [self.c_input]
@@ -655,8 +656,7 @@ class DMWGANGP(object):
       self.r_prior.train_on_batch([x_batch, zc_batch],
                                   [c_batch, c_batch])
   
-      if epoch % 50 == 0:
-        K.backend.set_value(self.alpha, K.backend.get_value(self.alpha)*0.5)
+      K.backend.set_value(self.alpha, 0.999**epoch)
 
       if epoch % self.n_eval == 0:
         x_batch = self.get_batch(origin = 'test', size = 10*self.n_batch)
