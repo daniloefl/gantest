@@ -57,6 +57,75 @@ def gradient_penalty_loss(y_true, y_pred, critic, generator, z, real):
 def wasserstein_loss(y_true, y_pred):
   return K.backend.mean(y_true*y_pred, axis = 0)
 
+class GenerateImage(keras.layers.Layer):
+
+    def __init__(self,
+                 n_x,
+                 n_y,
+                 n_pix,
+                 **kwargs):
+        """Generate image from positions
+        :param n_x: Size in x.
+        :param n_y: Size in y.
+        :param n_pix: Number of pixels produced.
+        :param kwargs:
+        """
+        super(GenerateImage, self).__init__(**kwargs)
+        self.n_x = n_x
+        self.n_y = n_y
+        self.n_pix = self.n_pix
+
+    def get_config(self):
+        config = {
+        }
+        base_config = super(GenerateImage, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+
+    def compute_output_shape(self, input_shape):
+        return (input_shape[0], self.n_x, self.n_y, 1)
+
+    def compute_mask(self, inputs, input_mask=None):
+        return input_mask
+
+    def build(self, input_shape):
+        super(GenerateImage, self).build(input_shape)
+
+    def call(self, inputs, training=None):
+        # input shape for each input: (Nbatch, n_pix)
+        pos_x = inputs[0]
+        pos_y = inputs[1]
+        energy = inputs[2]
+        # get batch size
+        Nbatch = K.backend.shape(energy)[0]
+        # get number of pixels
+        Npix = K.backend.shape(energy)[1]
+
+        # now we map the x and y positions to a single number given by x + Nx * y
+        # afterwards we can just get the i-th item of an identity matrix, multiply it by the energy and sum
+
+        # position after rolling out
+        pos_rolled_out = pos_x + self.n_x*pos_y # results in a number from 0 to self.n_x*self.n_y of shape (Nbatch, Npix)
+
+        # identity matrix used to fill each bin after rolling out
+        identity = tf.eye(self.n_x*self.n_y)
+        identity_tiled = tf.tile(tf.reshape(identity, [1, self.n_x*self.n_y, self.n_x*self.n_y]), [Nbatch, 1, 1]) # now it is repeated for each batch -- shape is (Nbatch, nx*ny, nx*ny)
+
+        # these are rows with ones at the exact position
+        pos_rows = tf.gather_nd(identity_tiled, pos_rolled_out) # shape is (Nbatch, Npix, nx*ny)
+
+        # reshape the energy to repeat its value nx*ny times in a new dimension
+        energy_tiled = tf.tile(tf.reshape(energy, [Nbatch, Npix, 1]), [1, 1, self.n_x*self.n_y])
+        # energy_tiled has shape [Nbatch, Npix, self.n_x*self.n_y]
+ 
+        # the image rolled out is the i-th row corresponding to the required position (will have 1 only in the i-th column), scaled by the energy and summed
+        # the resulting image
+        image_rolled_out = tf.reduce_sum(pos_rows * energy_tiled, axis = 1) # sums over pixels, as the shape of both is (Nbatch, Npix, nx*ny)
+        # reduce_sum reduces the axis 1 of dimension Npix, so image_rolled_out has shape (Nbatch, nx*ny)
+
+        # to make the image in its appropriate format, just reshape it
+        image = tf.reshape(image_rolled_out, [-1, self.n_x, self.n_y, 1])
+        return image
+
 
 class RNNWGANGP(object):
   '''
@@ -163,18 +232,15 @@ class RNNWGANGP(object):
     self.generator_input = Input(shape = (None, self.n_dimensions,), name = 'generator_input')
 
     xg = self.generator_input
-    e_out, state_e_h, state_e_c = K.layers.recurrent.LSTM(512, return_state = True)(xg)
-    encoder_states = [state_e_h, state_e_c]
+    xg = K.layers.recurrent.LSTM(512, return_sequences = True)(xg)
+    xg = K.layers.recurrent.LSTM(128, return_sequences = True)(xg)
+    xg = K.layers.recurrent.LSTM(64, return_sequences = True)(xg)
+    pos_x = K.layers.Dense(1, activation = 'softmax')(xg)
+    pos_y = K.layers.Dense(1, activation = 'softmax')(xg)
+    energy = K.layers.Dense(1, activation = 'relu')(xg)
+    image = GenerateImage()([pos_x, pos_y, energy])
 
-    self.latent_input = Input(shape = (None, 512), name = 'generator_seq_output')
-
-    xg = self.latent_input
-    d_out, state_d_h, state_d_c = K.layers.recurrent.LSTM(512, return_sequences = True, return_state = True)(xg, initial_states = encoder_states)
-    pos_x = K.layers.Dense(1, activation = 'softmax')(d_out)
-    pos_y = K.layers.Dense(1, activation = 'softmax')(d_out)
-    energy = K.layers.Dense(1, activation = 'relu')(d_out)
-
-    self.generator = Model([self.generator_input, self.latent_input], [pos_x, pos_y, energy], name = "generator")
+    self.generator = Model(self.generator_input, image, name = "generator")
     self.generator.trainable = True
     self.generator.compile(loss = K.losses.mean_squared_error, optimizer = Adam(lr = 1e-4), metrics = [])
 
@@ -456,8 +522,8 @@ def main():
                     default='5000',
                     help='Number to be appended to end of filename when loading pretrained networks. Ignored during the "train" mode. (default: "1500")')
   parser.add_argument('--prefix', dest='prefix', action='store',
-                    default='wgangp',
-                    help='Prefix to be added to filenames when producing plots. (default: "wgangp")')
+                    default='rnnwgangp',
+                    help='Prefix to be added to filenames when producing plots. (default: "rnnwgangp")')
   parser.add_argument('--mode', metavar='MODE', choices=['train', 'plot_loss', 'plot_gen', 'plot_data'],
                      default = 'train',
                      help='The mode is either "train" (a neural network), "plot_loss" (plot the loss function of a previous training), "plot_gen" (show samples from the generator), "plot_data" (plot examples of the training data sample). (default: train)')
@@ -465,7 +531,7 @@ def main():
   prefix = args.prefix
   trained = args.trained
 
-  network = WGANGP()
+  network = RNNWGANGP()
 
   if not os.path.exists(args.result_dir):
     os.makedirs(args.result_dir)
