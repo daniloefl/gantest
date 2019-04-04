@@ -57,7 +57,7 @@ def gradient_penalty_loss(y_true, y_pred, critic, generator, z, real):
 def wasserstein_loss(y_true, y_pred):
   return K.backend.mean(y_true*y_pred, axis = 0)
 
-class GenerateImage(keras.layers.Layer):
+class GenerateImage(K.layers.Layer):
 
     def __init__(self,
                  n_x,
@@ -73,7 +73,7 @@ class GenerateImage(keras.layers.Layer):
         super(GenerateImage, self).__init__(**kwargs)
         self.n_x = n_x
         self.n_y = n_y
-        self.n_pix = self.n_pix
+        self.n_pix = n_pix
 
     def get_config(self):
         config = {
@@ -104,7 +104,7 @@ class GenerateImage(keras.layers.Layer):
         # afterwards we can just get the i-th item of an identity matrix, multiply it by the energy and sum
 
         # position after rolling out
-        pos_rolled_out = pos_x + self.n_x*pos_y # results in a number from 0 to self.n_x*self.n_y of shape (Nbatch, Npix)
+        pos_rolled_out = tf.cast(pos_x + self.n_x*pos_y, tf.int32) # results in a number from 0 to self.n_x*self.n_y of shape (Nbatch, Npix)
 
         # identity matrix used to fill each bin after rolling out
         identity = tf.eye(self.n_x*self.n_y)
@@ -231,15 +231,16 @@ class RNNWGANGP(object):
   https://blog.keras.io/a-ten-minute-introduction-to-sequence-to-sequence-learning-in-keras.html
   '''
   def create_generator(self):
-    self.generator_input = Input(shape = (None, self.n_dimensions,), name = 'generator_input')
+    self.generator_input = Input(shape = (self.n_pix, self.n_dimensions,), name = 'generator_input')
 
     xg = self.generator_input
     xg = K.layers.recurrent.LSTM(512, return_sequences = True)(xg)
     xg = K.layers.recurrent.LSTM(128, return_sequences = True)(xg)
     xg = K.layers.recurrent.LSTM(64, return_sequences = True)(xg)
-    pos_x = K.layers.Dense(1, activation = 'softmax')(xg)
-    pos_y = K.layers.Dense(1, activation = 'softmax')(xg)
-    energy = K.layers.Dense(1, activation = 'relu')(xg)
+    # TODO -- return sequence
+    pos_x = K.layers.Dense(self.n_pix, activation = 'softmax')(xg)
+    pos_y = K.layers.Dense(self.n_pix, activation = 'softmax')(xg)
+    energy = K.layers.Dense(self.n_pix, activation = 'relu')(xg)
     image = GenerateImage(self.n_x, self.n_y, self.n_pix)([pos_x, pos_y, energy])
 
     self.generator = Model(self.generator_input, image, name = "generator")
