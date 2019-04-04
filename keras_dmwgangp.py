@@ -41,19 +41,21 @@ def smoothen(y):
   box = np.ones(N)/float(N)
   return np.convolve(y, box, mode = 'same')
 
-def gradient_penalty_loss(y_true, y_pred, critic, generator, c, z, real, N, n_x, n_y):
+def gradient_penalty_loss(y_true, y_pred, critic, generator, c, z, real, n_x, n_y):
   Ns = K.backend.shape(real)[0]
   d1 = generator([z, c])
   d2 = real
   diff = d2 - d1
-  #epsilon = K.backend.random_uniform_variable(shape=[Ns, 1, 1, 1], low = 0., high = 1.)
   epsilon = tf.random.uniform(shape=[Ns, 1, 1, 1], minval = 0., maxval = 1.)
   interp_input = d1 + (epsilon*diff)
-  gradients = K.backend.gradients(critic(interp_input), [interp_input])[0]
+  gradients = tf.reshape(tf.gradients(critic(interp_input), interp_input), [-1, n_x*n_y])
   ## not needed as there is a single element in interp_input here (the discriminator output)
   ## the only dimension left is the batch, which we just average over in the last step
-  slopes = K.backend.sqrt(1e-6 + K.backend.sum(K.backend.square(gradients), axis = [1]))
-  gp = K.backend.mean(K.backend.square(K.backend.max(slopes - 1, 0)))
+  grad_sum = tf.reduce_sum(tf.square(gradients), axis = 1) > 1.
+  grad_safe = tf.where(grad_sum, gradients, tf.ones_like(gradients))
+  grad_abs = 0. * gradients
+  grad_norm = tf.where(grad_sum, tf.norm(grad_safe, axis = 1), tf.reduce_sum(grad_abs, axis = 1))
+  gp = tf.reduce_mean(tf.square(grad_norm - 1.0))
   return gp
 
 def wasserstein_loss(y_true, y_pred):
@@ -413,8 +415,8 @@ class DMWGANGP(object):
                               z = self.z_input,
                               c = self.c_input,
                               real = self.real_input,
-                              N = self.n_batch,
-                              n_x = self.n_x, n_y = self.n_y)
+                              n_x = self.n_x,
+                              n_y = self.n_y)
 
     # now use this combined generator to calculate the Wasserstein distance
     wdistance = K.layers.Subtract()([
@@ -441,7 +443,7 @@ class DMWGANGP(object):
                                   name = "metric_real_only")
     self.metric_real_only.compile(loss = [wasserstein_loss],
                                   loss_weights = [1.0],
-                                  optimizer = Adam(lr = 1e-4), metrics = [])
+                                  optimizer = Adam(lr = 2e-4, beta_1 = 0.5, beta_2 = 0.5), metrics = [])
 
 
     def entropy_q(x_in):
@@ -464,7 +466,7 @@ class DMWGANGP(object):
                                        name = "gcf_%d" % i)
       self.gen_critic_fixed[i].compile(loss = [wasserstein_loss, K.losses.categorical_crossentropy],
                                        loss_weights = [1.0, self.lambda_enc],
-                                       optimizer = Adam(lr = 1e-4), metrics = [])
+                                       optimizer = Adam(lr = 2e-4, beta_1 = 0.5, beta_2 = 0.5), metrics = [])
 
     for k in range(self.n_gens):
       self.generator[k].trainable = False
@@ -478,7 +480,7 @@ class DMWGANGP(object):
                              name = "q_generator")
     self.q_generator.compile(loss = [K.losses.categorical_crossentropy],
                              loss_weights = [1.0], ### algorithm in app. A has a negative sign here, but code has the same sign as in gen_critic_fixed
-                             optimizer = Adam(lr = 1e-4), metrics = [])
+                             optimizer = Adam(lr = 2e-4, beta_1 = 0.9, beta_2 = 0.999), metrics = [])
 
     for k in range(self.n_gens):
       self.generator[k].trainable = False
@@ -520,7 +522,7 @@ class DMWGANGP(object):
                           name = "r_prior")
     self.r_prior.compile(loss = [cross_entropy_q_r_loss_k_partial, entropy_r_loss_k],
                          loss_weights = [1.0, -self.lambda_entropy],
-                         optimizer = Adam(lr = 1e-4), metrics = [])
+                         optimizer = Adam(lr = 1e-3, beta_1 = 0.5, beta_2 = 0.5), metrics = [])
 
   '''
     Read data and put it in x_train and x_test after minor preprocessing.
