@@ -166,6 +166,7 @@ class RNNWGANGP(object):
                lambda_gp = 10.0,
                n_eval = 50,
                n_x = 28, n_y = 28,
+               n_pix = 128,
                n_dimensions = 200):
     '''
     Initialise the network.
@@ -185,6 +186,7 @@ class RNNWGANGP(object):
     self.generator = None
     self.n_x = n_x
     self.n_y = n_y
+    self.n_pix = n_pix
     self.n_dimensions = n_dimensions
 
   '''
@@ -238,7 +240,7 @@ class RNNWGANGP(object):
     pos_x = K.layers.Dense(1, activation = 'softmax')(xg)
     pos_y = K.layers.Dense(1, activation = 'softmax')(xg)
     energy = K.layers.Dense(1, activation = 'relu')(xg)
-    image = GenerateImage()([pos_x, pos_y, energy])
+    image = GenerateImage(self.n_x, self.n_y, self.n_pix)([pos_x, pos_y, energy])
 
     self.generator = Model(self.generator_input, image, name = "generator")
     self.generator.trainable = True
