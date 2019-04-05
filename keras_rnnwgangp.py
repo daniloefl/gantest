@@ -40,18 +40,37 @@ def smoothen(y):
   box = np.ones(N)/float(N)
   return np.convolve(y, box, mode = 'same')
 
-def gradient_penalty_loss(y_true, y_pred, critic, generator, z, real):
+#def gradient_penalty_loss(y_true, y_pred, critic, generator, z, real):
+#  Ns = K.backend.shape(real)[0]
+#  d1 = generator(z)
+#  d2 = real
+#  diff = d2 - d1
+#  epsilon = tf.random.uniform(shape=[Ns, 1, 1, 1], minval = 0., maxval = 1.)
+#  interp_input = d1 + (epsilon*diff)
+#  gradients = K.backend.gradients(critic(interp_input), [interp_input])[0]
+#  ## not needed as there is a single element in interp_input here (the discriminator output)
+#  ## the only dimension left is the batch, which we just average over in the last step
+#  slopes = K.backend.sqrt(1e-6 + K.backend.sum(K.backend.square(gradients), axis = [1]))
+#  gp = K.backend.mean(K.backend.square(1 - slopes))
+#  return gp
+
+def gradient_penalty_loss(y_true, y_pred, critic, generator, z, real, n_x, n_y):
   Ns = K.backend.shape(real)[0]
   d1 = generator(z)
   d2 = real
   diff = d2 - d1
   epsilon = tf.random.uniform(shape=[Ns, 1, 1, 1], minval = 0., maxval = 1.)
   interp_input = d1 + (epsilon*diff)
-  gradients = K.backend.gradients(critic(interp_input), [interp_input])[0]
+  gradients = tf.reshape(tf.gradients(critic(interp_input), interp_input), [-1, n_x*n_y])
+  slopes = tf.sqrt(1e-6 + tf.reduce_sum(tf.square(gradients), axis = 1))
+  gp = tf.reduce_mean(tf.square(1 - slopes))
   ## not needed as there is a single element in interp_input here (the discriminator output)
   ## the only dimension left is the batch, which we just average over in the last step
-  slopes = K.backend.sqrt(1e-6 + K.backend.sum(K.backend.square(gradients), axis = [1]))
-  gp = K.backend.mean(K.backend.square(1 - slopes))
+  ##grad_sum = tf.reduce_sum(tf.square(gradients), axis = 1) > 1.
+  ##grad_safe = tf.where(grad_sum, gradients, tf.ones_like(gradients))
+  ##grad_abs = 0. * gradients
+  ##grad_norm = tf.where(grad_sum, tf.norm(grad_safe, axis = 1), tf.reduce_sum(grad_abs, axis = 1))
+  ##gp = tf.reduce_mean(tf.square(grad_norm - 1.0))
   return gp
 
 def wasserstein_loss(y_true, y_pred):
@@ -89,62 +108,95 @@ class GenerateImage(K.layers.Layer):
 
     def call(self, inputs, training=None):
         # input shape for each input: (Nbatch, n_pix)
-        pos_x = inputs[0]*self.n_x*0.5 + self.n_x*0.5
-        pos_y = inputs[1]*self.n_y*0.5 + self.n_y*0.5
+
+        ####### The following is to be used if the network predicts a single number with nx and ny positions, instead of giving a softmax output
+        ####### if the pos_x and pos_y layers generate a single number (shape = (Nbatch, Npix, 1))
+        ####### Begin -----
+        ######pos_x = inputs[0]*self.n_x*0.5 + self.n_x*0.5
+        ######pos_y = inputs[1]*self.n_y*0.5 + self.n_y*0.5
+        ######energy = inputs[2]
+        ####### get batch size
+        ######Nbatch = K.backend.shape(energy)[0]
+        ####### get number of pixels
+        ######Npix = self.n_pix # K.backend.shape(energy)[1]
+
+        ####### now we map the x and y positions to a single number given by x + Nx * y
+        ####### afterwards we can just get the i-th item of an identity matrix, multiply it by the energy and sum
+
+        ####### position after rolling out
+        ######pos_rolled_out = pos_x + self.n_x*pos_y # results in a number from 0 to self.n_x*self.n_y of shape (Nbatch, Npix, 1)
+
+        ####### this should work, but it is not differentiable
+        ########pos_rolled_out = tf.cast(pos_rolled_out, tf.int32)
+        ####### identity matrix used to fill each bin after rolling out
+        ########identity = tf.eye(self.n_x*self.n_y)
+        ####### these are rows with ones at the exact position
+        ########pos_rows = tf.gather_nd(identity, pos_rolled_out) # shape is (Nbatch, Npix, nx*ny)
+
+        ####### this should also work, but it is not differentiable
+        ########pos_rolled_out = tf.cast(pos_rolled_out, tf.int32)
+        ####### this is equivalent using one_hot
+        ########pos_rows = tf.one_hot(pos_rolled_out, self.n_x*self.n_y)
+        ########pos_rows = tf.reshape(pos_rows, [Nbatch, Npix, self.n_x*self.n_y])
+
+        ####### this uses a differentiable approximation
+        ####### generate the an axis with the number of pixels rolled out simply counting from 0 to the maximum number of pixels
+        ####### it is kept with the first two axes so it can be expanded in Nbatch and Npix later
+        ######x_range = tf.reshape(tf.range(self.n_x*self.n_y, dtype = tf.float32), [1, 1, self.n_x*self.n_y])
+
+        ####### now create a Gaussian shape along the x_range axis, using the pos_rolled_out as a mean
+        ####### since pos_rolled_out has shape (Nbatch, Npix, 1), the first two axes are expanded in subtraction, by tiling x_range
+        ####### the standard deviation of this Gaussian is set to 1.0/10.0, so that it is smaller than the resolution in x_range
+        ####### this effectively leads to a single entry in pos_rows to be 1 and all other entries to be negligible, as we expect from one_hot
+        ####### note that the normalisation of the maximum is 1, because pos_rolled_out - x_range is zero at the correct position and exp(0) = 1
+        ####### the small standard deviation takes care of leaving all other entries at small values
+        ######pos_rows = tf.exp(-tf.square(pos_rolled_out - x_range)*0.5*(10.0**2.0))
+        ####### the shape of pos_rows should be (Nbatch, Npix, nx*ny)
+
+        ####### reshape the energy to repeat its value nx*ny times in a new dimension
+        ######energy_tiled = tf.tile(energy, [1, 1, self.n_x*self.n_y])
+        ####### energy_tiled has shape [Nbatch, Npix, self.n_x*self.n_y] and it has the same value always in the last axis
+
+        ####### multiplying pos_rows by energy_tiled leads to a tensor with shape (Nbatch, Npix, nx*ny), where only one entry in the last axis has a non-zero value
+        ####### that value is exactly the energy of the pixel
+        ####### after that, we can sum in the axis 1 (the one of length Npix), and this will produce a single array of size nx*ny per batch with the sum of energies
+        ####### in each pixel corresponding to the position in the last axis
+
+        ####### the image rolled out is the i-th row corresponding to the required position (will have 1 only in the i-th column), scaled by the energy and summed
+        ####### the resulting image
+        ######image_rolled_out = tf.reduce_sum(pos_rows * energy_tiled, axis = 1) # sums over pixels, as the shape of both is (Nbatch, Npix, nx*ny)
+        ####### reduce_sum reduces the axis 1 of dimension Npix, so image_rolled_out has shape (Nbatch, nx*ny)
+
+        ####### to make the image in its appropriate format, just reshape it
+        ######image = tf.reshape(image_rolled_out, [Nbatch, self.n_x, self.n_y, 1])
+
+        ####### End -----
+
+        # This is the new setup:
+        # if the pos_x and pos_y layers generate a softmax output (shape = (Nbatch, Npix, nx/y))
+        # Begin -----
+        pos_x = inputs[0]
+        pos_y = inputs[1]
         energy = inputs[2]
         # get batch size
         Nbatch = K.backend.shape(energy)[0]
         # get number of pixels
         Npix = self.n_pix # K.backend.shape(energy)[1]
 
-        # now we map the x and y positions to a single number given by x + Nx * y
-        # afterwards we can just get the i-th item of an identity matrix, multiply it by the energy and sum
+        pos_x_tiled = tf.tile(tf.reshape(pos_x, [Nbatch, Npix, self.n_x, 1]), [1, 1, 1, self.n_y])
+        pos_y_tiled = tf.tile(tf.reshape(pos_y, [Nbatch, Npix, 1, self.n_y]), [1, 1, self.n_x, 1])
+        pos_rows = pos_x_tiled*pos_y_tiled
 
-        # position after rolling out
-        pos_rolled_out = pos_x + self.n_x*pos_y # results in a number from 0 to self.n_x*self.n_y of shape (Nbatch, Npix, 1)
+        # now pos_rows has shape (Nbatch, Npix, nx, ny)
+        # we can scale it by energy to have one image with the correct energy per pixel (blurred out depending on how certain the network is to output a single pixel or many)
+        energy_tiled = tf.tile(tf.tile(tf.reshape(energy, [Nbatch, Npix, 1, 1]), [1, 1, self.n_x, 1]), [1, 1, 1, self.n_y])
 
-        # this should work, but it is not differentiable
-        #pos_rolled_out = tf.cast(pos_rolled_out, tf.int32)
-        # identity matrix used to fill each bin after rolling out
-        #identity = tf.eye(self.n_x*self.n_y)
-        # these are rows with ones at the exact position
-        #pos_rows = tf.gather_nd(identity, pos_rolled_out) # shape is (Nbatch, Npix, nx*ny)
+        # now sum all pixels
+        image = tf.reduce_sum(pos_rows * energy_tiled, axis = 1) # sums over pixels, as the shape of both is (Nbatch, Npix, nx, ny)
+        image = tf.reshape(image, [Nbatch, self.n_x, self.n_y, 1]) # add axis for layer
 
-        # this should also work, but it is not differentiable
-        #pos_rolled_out = tf.cast(pos_rolled_out, tf.int32)
-        # this is equivalent using one_hot
-        #pos_rows = tf.one_hot(pos_rolled_out, self.n_x*self.n_y)
-        #pos_rows = tf.reshape(pos_rows, [Nbatch, Npix, self.n_x*self.n_y])
+        # End -----
 
-        # this uses a differentiable approximation
-        # generate the an axis with the number of pixels rolled out simply counting from 0 to the maximum number of pixels
-        # it is kept with the first two axes so it can be expanded in Nbatch and Npix later
-        x_range = tf.reshape(tf.range(self.n_x*self.n_y, dtype = tf.float32), [1, 1, self.n_x*self.n_y])
-        # now create a Gaussian shape along the x_range axis, using the pos_rolled_out as a mean
-        # since pos_rolled_out has shape (Nbatch, Npix, 1), the first two axes are expanded in subtraction, by tiling x_range
-        # the standard deviation of this Gaussian is set to 1.0/10.0, so that it is smaller than the resolution in x_range
-        # this effectively leads to a single entry in pos_rows to be 1 and all other entries to be negligible, as we expect from one_hot
-        # note that the normalisation of the maximum is 1, because pos_rolled_out - x_range is zero at the correct position and exp(0) = 1
-        # the small standard deviation takes care of leaving all other entries at small values
-        pos_rows = tf.exp(-tf.square(pos_rolled_out - x_range)*0.5*(10.0**2.0))
-        # the shape of pos_rows should be (Nbatch, Npix, nx*ny)
-
-        # reshape the energy to repeat its value nx*ny times in a new dimension
-        energy_tiled = tf.tile(energy, [1, 1, self.n_x*self.n_y])
-        # energy_tiled has shape [Nbatch, Npix, self.n_x*self.n_y] and it has the same value always in the last axis
-
-        # multiplying pos_rows by energy_tiled leads to a tensor with shape (Nbatch, Npix, nx*ny), where only one entry in the last axis has a non-zero value
-        # that value is exactly the energy of the pixel
-        # after that, we can sum in the axis 1 (the one of length Npix), and this will produce a single array of size nx*ny per batch with the sum of energies
-        # in each pixel corresponding to the position in the last axis
-
-        # the image rolled out is the i-th row corresponding to the required position (will have 1 only in the i-th column), scaled by the energy and summed
-        # the resulting image
-        image_rolled_out = tf.reduce_sum(pos_rows * energy_tiled, axis = 1) # sums over pixels, as the shape of both is (Nbatch, Npix, nx*ny)
-        # reduce_sum reduces the axis 1 of dimension Npix, so image_rolled_out has shape (Nbatch, nx*ny)
-
-        # to make the image in its appropriate format, just reshape it
-        image = tf.reshape(image_rolled_out, [Nbatch, self.n_x, self.n_y, 1])
         return image
 
 
@@ -255,11 +307,11 @@ class RNNWGANGP(object):
     self.generator_input = Input(shape = (None, self.n_dimensions,), name = 'generator_input')
 
     xg = self.generator_input
-    xg = K.layers.recurrent.LSTM(self.n_dimensions, return_sequences = True)(xg)
-    xg = K.layers.recurrent.LSTM(self.n_dimensions, return_sequences = True)(xg)
-    xg = K.layers.recurrent.LSTM(self.n_dimensions, return_sequences = True)(xg)
-    pos_x = K.layers.TimeDistributed(K.layers.Dense(1, activation = 'tanh'))(xg)
-    pos_y = K.layers.TimeDistributed(K.layers.Dense(1, activation = 'tanh'))(xg)
+    xg = K.layers.recurrent.LSTM(512, return_sequences = True)(xg)
+    xg = K.layers.recurrent.LSTM(256, return_sequences = True)(xg)
+    xg = K.layers.recurrent.LSTM(128, return_sequences = True)(xg)
+    pos_x = K.layers.TimeDistributed(K.layers.Dense(self.n_x, activation = 'softmax'))(xg)
+    pos_y = K.layers.TimeDistributed(K.layers.Dense(self.n_y, activation = 'softmax'))(xg)
     energy = K.layers.TimeDistributed(K.layers.Dense(1, activation = 'relu'))(xg)
     image = GenerateImage(self.n_x, self.n_y, self.n_pix)([pos_x, pos_y, energy])
 
@@ -285,7 +337,7 @@ class RNNWGANGP(object):
     self.real_input = Input(shape = (self.n_x, self.n_y, 1), name = 'real_input')
 
     from functools import partial
-    partial_gp_loss = partial(gradient_penalty_loss, critic = self.critic, generator = self.generator, z = self.z_input, real = self.real_input)
+    partial_gp_loss = partial(gradient_penalty_loss, critic = self.critic, generator = self.generator, z = self.z_input, real = self.real_input, n_x = self.n_x, n_y = self.n_y)
 
     wdistance = K.layers.Subtract()([self.critic(self.generator(self.z_input)),
                                      self.critic(self.real_input)])
