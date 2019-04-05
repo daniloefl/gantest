@@ -112,7 +112,7 @@ class VAE(object):
   '''
   Create decoder network.
   '''
-  def create_decoder(self):
+  def create_dec(self):
     self.dec_input = Input(shape = (self.n_dimensions,), name = 'dec_input')
 
     xg = self.dec_input
