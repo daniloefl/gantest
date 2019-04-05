@@ -108,15 +108,14 @@ class GenerateImage(K.layers.Layer):
 
         # identity matrix used to fill each bin after rolling out
         identity = tf.eye(self.n_x*self.n_y)
-        identity_tiled = tf.tile(tf.reshape(identity, [1, self.n_x*self.n_y, self.n_x*self.n_y]), [Nbatch, 1, 1]) # now it is repeated for each batch -- shape is (Nbatch, nx*ny, nx*ny)
 
         # these are rows with ones at the exact position
-        pos_rows = tf.gather_nd(identity_tiled, pos_rolled_out) # shape is (Nbatch, Npix, nx*ny)
+        pos_rows = tf.gather_nd(identity, pos_rolled_out) # shape is (Nbatch, Npix, nx*ny)
 
         # reshape the energy to repeat its value nx*ny times in a new dimension
-        energy_tiled = tf.tile(tf.reshape(energy, [Nbatch, Npix, 1]), [1, 1, self.n_x*self.n_y])
+        energy_tiled = tf.tile(energy, [1, 1, self.n_x*self.n_y])
         # energy_tiled has shape [Nbatch, Npix, self.n_x*self.n_y]
- 
+
         # the image rolled out is the i-th row corresponding to the required position (will have 1 only in the i-th column), scaled by the energy and summed
         # the resulting image
         image_rolled_out = tf.reduce_sum(pos_rows * energy_tiled, axis = 1) # sums over pixels, as the shape of both is (Nbatch, Npix, nx*ny)
@@ -238,9 +237,9 @@ class RNNWGANGP(object):
     xg = K.layers.recurrent.LSTM(128, return_sequences = True)(xg)
     xg = K.layers.recurrent.LSTM(64, return_sequences = True)(xg)
     # TODO -- return sequence
-    pos_x = K.layers.Dense(self.n_pix, activation = 'softmax')(xg)
-    pos_y = K.layers.Dense(self.n_pix, activation = 'softmax')(xg)
-    energy = K.layers.Dense(self.n_pix, activation = 'relu')(xg)
+    pos_x = K.layers.Dense(1, activation = 'softmax')(xg)
+    pos_y = K.layers.Dense(1, activation = 'softmax')(xg)
+    energy = K.layers.Dense(1, activation = 'relu')(xg)
     image = GenerateImage(self.n_x, self.n_y, self.n_pix)([pos_x, pos_y, energy])
 
     self.generator = Model(self.generator_input, image, name = "generator")
