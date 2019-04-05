@@ -79,9 +79,9 @@ def wasserstein_loss(y_true, y_pred):
 class GenerateImage(K.layers.Layer):
 
     def __init__(self,
-                 n_x,
-                 n_y,
-                 n_pix,
+                 n_x = 28,
+                 n_y = 28,
+                 n_pix = 128,
                  **kwargs):
         """Generate image from positions
         :param n_x: Size in x.
@@ -96,6 +96,9 @@ class GenerateImage(K.layers.Layer):
 
     def get_config(self):
         config = {
+               'n_x': self.n_x,
+               'n_y': self.n_y,
+               'n_pix': self.n_pix,
         }
         base_config = super(GenerateImage, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
@@ -556,7 +559,7 @@ class RNNWGANGP(object):
     json_file = open('%s.json' % generator_filename, 'r')
     loaded_model_json = json_file.read()
     json_file.close()
-    self.generator = K.models.model_from_json(loaded_model_json, custom_objects={'LayerNormalization': LayerNormalization})
+    self.generator = K.models.model_from_json(loaded_model_json, custom_objects={'LayerNormalization': LayerNormalization, 'GenerateImage': GenerateImage})
     self.generator.load_weights("%s.h5" % generator_filename)
     #self.generator.compile(loss = K.losses.mean_squared_error, optimizer = K.optimizers.Adam(lr = 1e-4), metrics = [])
 
@@ -567,7 +570,7 @@ class RNNWGANGP(object):
     json_file = open('%s.json' % generator_filename, 'r')
     loaded_model_json = json_file.read()
     json_file.close()
-    self.generator = K.models.model_from_json(loaded_model_json, custom_objects={'LayerNormalization': LayerNormalization})
+    self.generator = K.models.model_from_json(loaded_model_json, custom_objects={'LayerNormalization': LayerNormalization, 'GenerateImage': GenerateImage})
     self.generator.load_weights("%s.h5" % generator_filename)
 
     json_file = open('%s.json' % critic_filename, 'r')
