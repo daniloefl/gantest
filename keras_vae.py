@@ -44,6 +44,40 @@ def kldiv_loss(y_true, y_pred, z_mean, z_expsigma):
   z_sigma = tf.log(z_expsigma)
   return tf.reduce_mean(0.5 * tf.reduce_sum(tf.square(z_mean) + tf.square(z_sigma) - tf.log(tf.square(z_sigma)) - 1., axis = 1), axis = 0)
 
+class GenerateSamples(K.layers.Layer):
+
+    def __init__(self,
+                 **kwargs):
+        """Generate Gaussian samples from a mean and exp(sigma).
+        :param kwargs:
+        """
+        super(GenerateSamples, self).__init__(**kwargs)
+
+    def get_config(self):
+        config = {
+        }
+        base_config = super(GenerateSamples, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+
+    def compute_output_shape(self, input_shape):
+        return (input_shape[0][0], input_shape[0][1])
+
+    def build(self, input_shape):
+        super(GenerateSamples, self).build(input_shape)
+
+    def call(self, inputs, training=None):
+        z_mean = inputs[0]
+        z_expsigma = inputs[1]
+        z_sigma = tf.log(z_expsigma)
+
+        Nbatch = K.backend.shape(z_mean)[0]
+        Ndim = K.backend.shape(z_mean)[1]
+
+        normal = tf.random.normal([Nbatch, Ndim], 0., 1.)
+        z = z_mean + normal*z_sigma
+
+        return z
+
 class VAE(object):
   '''
   Implementation of the variational auto-encoder.
@@ -146,7 +180,7 @@ class VAE(object):
     xg = K.layers.LeakyReLU(0.2)(xg)
     #xg = K.layers.Dropout(0.5)(xg)
 
-    self.dec = Model(self.generator_input, xg, name = "dec")
+    self.dec = Model(self.dec_input, xg, name = "dec")
     self.dec.trainable = True
     self.dec.compile(loss = K.losses.mean_squared_error, optimizer = Adam(lr = 1e-4), metrics = [])
 
@@ -164,16 +198,16 @@ class VAE(object):
 
     self.real_input = Input(shape = (self.n_x, self.n_y, 1), name = 'real_input')
 
-    self.normal = tf.random.normal([-1, self.n_dimensions], 0., 1.)
     self.z_mean, self.z_expsigma = self.enc(self.real_input)
-    self.z_generated = self.z_mean + self.normal*tf.log(self.z_expsigma)
+    self.z_generated = GenerateSamples()([self.z_mean, self.z_expsigma])
 
+    from functools import partial
     kldiv_loss_partial = partial(kldiv_loss, z_mean = self.z_mean, z_expsigma = self.z_expsigma)
 
     self.vae = Model(self.real_input,
                      [self.dec(self.z_generated), self.z_generated],
                      name = "vae")
-    self.vae.compile(loss = [K.losses.mean_squared_error, kldiv_loss],
+    self.vae.compile(loss = [K.losses.mean_squared_error, kldiv_loss_partial],
                      loss_weights = [1.0, 1.0],
                      optimizer = Adam(lr = 1e-4, beta_1 = 0), metrics = [])
 
@@ -312,7 +346,7 @@ class VAE(object):
     json_file = open('%s.json' % enc_filename, 'r')
     loaded_model_json = json_file.read()
     json_file.close()
-    self.enc = K.models.model_from_json(loaded_model_json, custom_objects={'LayerNormalization': LayerNormalization})
+    self.enc = K.models.model_from_json(loaded_model_json, custom_objects={'LayerNormalization': LayerNormalization, 'GenerateSamples': GenerateSamples})
     self.enc.load_weights("%s.h5" % enc_filename)
 
     json_file = open('%s.json' % dec_filename, 'r')
