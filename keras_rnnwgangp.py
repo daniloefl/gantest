@@ -82,18 +82,18 @@ class GenerateImage(K.layers.Layer):
         return dict(list(base_config.items()) + list(config.items()))
 
     def compute_output_shape(self, input_shape):
-        return (input_shape[0], self.n_x, self.n_y, 1)
+        return (input_shape[0][0], self.n_x, self.n_y, 1)
 
-    def compute_mask(self, inputs, input_mask=None):
-        return input_mask
+    #def compute_mask(self, inputs, input_mask=None):
+    #    return input_mask
 
     def build(self, input_shape):
         super(GenerateImage, self).build(input_shape)
 
     def call(self, inputs, training=None):
         # input shape for each input: (Nbatch, n_pix)
-        pos_x = inputs[0]
-        pos_y = inputs[1]
+        pos_x = inputs[0]*self.n_x*0.5 + self.n_x*0.5
+        pos_y = inputs[1]*self.n_y*0.5 + self.n_y*0.5
         energy = inputs[2]
         # get batch size
         Nbatch = K.backend.shape(energy)[0]
@@ -122,7 +122,7 @@ class GenerateImage(K.layers.Layer):
         # reduce_sum reduces the axis 1 of dimension Npix, so image_rolled_out has shape (Nbatch, nx*ny)
 
         # to make the image in its appropriate format, just reshape it
-        image = tf.reshape(image_rolled_out, [-1, self.n_x, self.n_y, 1])
+        image = tf.reshape(image_rolled_out, [Nbatch, self.n_x, self.n_y, 1])
         return image
 
 
@@ -230,25 +230,21 @@ class RNNWGANGP(object):
   https://blog.keras.io/a-ten-minute-introduction-to-sequence-to-sequence-learning-in-keras.html
   '''
   def create_generator(self):
-    self.generator_input = Input(shape = (self.n_pix, self.n_dimensions,), name = 'generator_input')
+    self.generator_input = Input(shape = (None, self.n_dimensions,), name = 'generator_input')
 
     xg = self.generator_input
-    print("0", xg)
-    xg = K.layers.recurrent.LSTM(512, return_sequences = True)(xg)
-    print("A", xg)
-    xg = K.layers.recurrent.LSTM(128, return_sequences = True)(xg)
-    print("B", xg)
-    xg = K.layers.recurrent.LSTM(64, return_sequences = True)(xg)
-    print("C", xg)
-    # TODO -- return sequence
-    pos_x = K.layers.Dense(1, activation = 'softmax')(xg)
-    pos_y = K.layers.Dense(1, activation = 'softmax')(xg)
-    energy = K.layers.Dense(1, activation = 'relu')(xg)
+    xg = K.layers.recurrent.LSTM(self.n_dimensions, return_sequences = True)(xg)
+    xg = K.layers.recurrent.LSTM(self.n_dimensions, return_sequences = True)(xg)
+    xg = K.layers.recurrent.LSTM(self.n_dimensions, return_sequences = True)(xg)
+    pos_x = K.layers.TimeDistributed(K.layers.Dense(1, activation = 'tanh'))(xg)
+    pos_y = K.layers.TimeDistributed(K.layers.Dense(1, activation = 'tanh'))(xg)
+    energy = K.layers.TimeDistributed(K.layers.Dense(1, activation = 'relu'))(xg)
     image = GenerateImage(self.n_x, self.n_y, self.n_pix)([pos_x, pos_y, energy])
 
     self.generator = Model(self.generator_input, image, name = "generator")
     self.generator.trainable = True
     self.generator.compile(loss = K.losses.mean_squared_error, optimizer = Adam(lr = 1e-4), metrics = [])
+    self.generator.summary()
 
   '''
   Create all networks.
@@ -263,7 +259,7 @@ class RNNWGANGP(object):
     self.critic.trainable = True
 
     self.dummy_input = Input(shape = (1,), name = 'dummy_input')
-    self.z_input = Input(shape = (self.n_dimensions,), name = 'z_input')
+    self.z_input = Input(shape = (None, self.n_dimensions,), name = 'z_input')
     self.real_input = Input(shape = (self.n_x, self.n_y, 1), name = 'real_input')
 
     from functools import partial
@@ -330,7 +326,7 @@ class RNNWGANGP(object):
     import matplotlib.pyplot as plt
     import seaborn as sns
     fig, ax = plt.subplots(figsize = (20, 20), nrows = 5, ncols = 5)
-    z = np.random.normal(loc = 0.0, scale = 1.0, size = (5*5, self.n_dimensions,))
+    z = np.random.normal(loc = 0.0, scale = 1.0, size = (5*5, self.n_pix, self.n_dimensions,))
     out = self.generator.predict(z, verbose = 0)
     for i in range(5):
       for j in range(5):
@@ -362,7 +358,7 @@ class RNNWGANGP(object):
       n_critic = self.n_critic
       for k in range(0, n_critic):
         x_batch = self.get_batch(size = self.n_batch)
-        z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
+        z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_pix, self.n_dimensions))
 
         self.generator.trainable = False
         self.critic.trainable = True
@@ -371,7 +367,7 @@ class RNNWGANGP(object):
                                               sample_weight = [positive_y, positive_y])
 
       # step generator
-      z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
+      z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_pix, self.n_dimensions))
 
       self.generator.trainable = True
       self.critic.trainable = False
@@ -384,7 +380,7 @@ class RNNWGANGP(object):
         critic_metric_real = 0
         c = 0.0
         for k in range(32):
-          z = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
+          z = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_pix, self.n_dimensions))
           critic_metric_fake += np.mean(self.critic.predict(self.generator.predict(z, verbose = 0), verbose = 0))
           c += 1.0
         critic_metric_fake /= c
@@ -400,7 +396,7 @@ class RNNWGANGP(object):
         critic_gradient_penalty = 0
         for k in range(0, self.n_critic):
           x_batch = self.get_batch(origin = 'test', size = self.n_batch)
-          z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
+          z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_pix, self.n_dimensions))
 
           self.generator.trainable = False
           self.critic.trainable = True
@@ -507,7 +503,7 @@ class RNNWGANGP(object):
     self.critic.load_weights("%s.h5" % critic_filename)
 
     self.critic_input = K.layers.Input(shape = (self.n_x, self.n_y), name = 'critic_input')
-    self.generator_input = K.layers.Input(shape = (self.n_dimensions,), name = 'generator_input')
+    self.generator_input = K.layers.Input(shape = (None, self.n_dimensions,), name = 'generator_input')
 
     self.generator.compile(loss = K.losses.mean_squared_error, optimizer = K.optimizers.Adam(lr = 1e-4), metrics = [])
     self.critic.compile(loss = wasserstein_loss,
