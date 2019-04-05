@@ -233,9 +233,13 @@ class RNNWGANGP(object):
     self.generator_input = Input(shape = (self.n_pix, self.n_dimensions,), name = 'generator_input')
 
     xg = self.generator_input
+    print("0", xg)
     xg = K.layers.recurrent.LSTM(512, return_sequences = True)(xg)
+    print("A", xg)
     xg = K.layers.recurrent.LSTM(128, return_sequences = True)(xg)
+    print("B", xg)
     xg = K.layers.recurrent.LSTM(64, return_sequences = True)(xg)
+    print("C", xg)
     # TODO -- return sequence
     pos_x = K.layers.Dense(1, activation = 'softmax')(xg)
     pos_y = K.layers.Dense(1, activation = 'softmax')(xg)
