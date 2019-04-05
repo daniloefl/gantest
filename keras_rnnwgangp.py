@@ -84,9 +84,6 @@ class GenerateImage(K.layers.Layer):
     def compute_output_shape(self, input_shape):
         return (input_shape[0][0], self.n_x, self.n_y, 1)
 
-    #def compute_mask(self, inputs, input_mask=None):
-    #    return input_mask
-
     def build(self, input_shape):
         super(GenerateImage, self).build(input_shape)
 
@@ -98,23 +95,48 @@ class GenerateImage(K.layers.Layer):
         # get batch size
         Nbatch = K.backend.shape(energy)[0]
         # get number of pixels
-        Npix = K.backend.shape(energy)[1]
+        Npix = self.n_pix # K.backend.shape(energy)[1]
 
         # now we map the x and y positions to a single number given by x + Nx * y
         # afterwards we can just get the i-th item of an identity matrix, multiply it by the energy and sum
 
         # position after rolling out
-        pos_rolled_out = tf.cast(pos_x + self.n_x*pos_y, tf.int32) # results in a number from 0 to self.n_x*self.n_y of shape (Nbatch, Npix)
+        pos_rolled_out = pos_x + self.n_x*pos_y # results in a number from 0 to self.n_x*self.n_y of shape (Nbatch, Npix, 1)
 
+        # this should work, but it is not differentiable
+        #pos_rolled_out = tf.cast(pos_rolled_out, tf.int32)
         # identity matrix used to fill each bin after rolling out
-        identity = tf.eye(self.n_x*self.n_y)
-
+        #identity = tf.eye(self.n_x*self.n_y)
         # these are rows with ones at the exact position
-        pos_rows = tf.gather_nd(identity, pos_rolled_out) # shape is (Nbatch, Npix, nx*ny)
+        #pos_rows = tf.gather_nd(identity, pos_rolled_out) # shape is (Nbatch, Npix, nx*ny)
+
+        # this should also work, but it is not differentiable
+        #pos_rolled_out = tf.cast(pos_rolled_out, tf.int32)
+        # this is equivalent using one_hot
+        #pos_rows = tf.one_hot(pos_rolled_out, self.n_x*self.n_y)
+        #pos_rows = tf.reshape(pos_rows, [Nbatch, Npix, self.n_x*self.n_y])
+
+        # this uses a differentiable approximation
+        # generate the an axis with the number of pixels rolled out simply counting from 0 to the maximum number of pixels
+        # it is kept with the first two axes so it can be expanded in Nbatch and Npix later
+        x_range = tf.reshape(tf.range(self.n_x*self.n_y, dtype = tf.float32), [1, 1, self.n_x*self.n_y])
+        # now create a Gaussian shape along the x_range axis, using the pos_rolled_out as a mean
+        # since pos_rolled_out has shape (Nbatch, Npix, 1), the first two axes are expanded in subtraction, by tiling x_range
+        # the standard deviation of this Gaussian is set to 1.0/10.0, so that it is smaller than the resolution in x_range
+        # this effectively leads to a single entry in pos_rows to be 1 and all other entries to be negligible, as we expect from one_hot
+        # note that the normalisation of the maximum is 1, because pos_rolled_out - x_range is zero at the correct position and exp(0) = 1
+        # the small standard deviation takes care of leaving all other entries at small values
+        pos_rows = tf.exp(-tf.square(pos_rolled_out - x_range)*0.5*(10.0**2.0))
+        # the shape of pos_rows should be (Nbatch, Npix, nx*ny)
 
         # reshape the energy to repeat its value nx*ny times in a new dimension
         energy_tiled = tf.tile(energy, [1, 1, self.n_x*self.n_y])
-        # energy_tiled has shape [Nbatch, Npix, self.n_x*self.n_y]
+        # energy_tiled has shape [Nbatch, Npix, self.n_x*self.n_y] and it has the same value always in the last axis
+
+        # multiplying pos_rows by energy_tiled leads to a tensor with shape (Nbatch, Npix, nx*ny), where only one entry in the last axis has a non-zero value
+        # that value is exactly the energy of the pixel
+        # after that, we can sum in the axis 1 (the one of length Npix), and this will produce a single array of size nx*ny per batch with the sum of energies
+        # in each pixel corresponding to the position in the last axis
 
         # the image rolled out is the i-th row corresponding to the required position (will have 1 only in the i-th column), scaled by the energy and summed
         # the resulting image
