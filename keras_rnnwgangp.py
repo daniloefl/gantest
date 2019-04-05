@@ -40,20 +40,6 @@ def smoothen(y):
   box = np.ones(N)/float(N)
   return np.convolve(y, box, mode = 'same')
 
-#def gradient_penalty_loss(y_true, y_pred, critic, generator, z, real):
-#  Ns = K.backend.shape(real)[0]
-#  d1 = generator(z)
-#  d2 = real
-#  diff = d2 - d1
-#  epsilon = tf.random.uniform(shape=[Ns, 1, 1, 1], minval = 0., maxval = 1.)
-#  interp_input = d1 + (epsilon*diff)
-#  gradients = K.backend.gradients(critic(interp_input), [interp_input])[0]
-#  ## not needed as there is a single element in interp_input here (the discriminator output)
-#  ## the only dimension left is the batch, which we just average over in the last step
-#  slopes = K.backend.sqrt(1e-6 + K.backend.sum(K.backend.square(gradients), axis = [1]))
-#  gp = K.backend.mean(K.backend.square(1 - slopes))
-#  return gp
-
 def gradient_penalty_loss(y_true, y_pred, critic, generator, z, real, n_x, n_y):
   Ns = K.backend.shape(real)[0]
   d1 = generator(z)
@@ -61,17 +47,31 @@ def gradient_penalty_loss(y_true, y_pred, critic, generator, z, real, n_x, n_y):
   diff = d2 - d1
   epsilon = tf.random.uniform(shape=[Ns, 1, 1, 1], minval = 0., maxval = 1.)
   interp_input = d1 + (epsilon*diff)
-  gradients = tf.reshape(tf.gradients(critic(interp_input), interp_input), [-1, n_x*n_y])
-  slopes = tf.sqrt(1e-6 + tf.reduce_sum(tf.square(gradients), axis = 1))
-  gp = tf.reduce_mean(tf.square(1 - slopes))
+  gradients = K.backend.gradients(critic(interp_input), [interp_input])[0]
   ## not needed as there is a single element in interp_input here (the discriminator output)
   ## the only dimension left is the batch, which we just average over in the last step
-  ##grad_sum = tf.reduce_sum(tf.square(gradients), axis = 1) > 1.
-  ##grad_safe = tf.where(grad_sum, gradients, tf.ones_like(gradients))
-  ##grad_abs = 0. * gradients
-  ##grad_norm = tf.where(grad_sum, tf.norm(grad_safe, axis = 1), tf.reduce_sum(grad_abs, axis = 1))
-  ##gp = tf.reduce_mean(tf.square(grad_norm - 1.0))
+  slopes = K.backend.sqrt(1e-6 + K.backend.sum(K.backend.square(gradients), axis = [1]))
+  gp = K.backend.mean(K.backend.square(1 - slopes))
   return gp
+
+#def gradient_penalty_loss(y_true, y_pred, critic, generator, z, real, n_x, n_y):
+#  Ns = K.backend.shape(real)[0]
+#  d1 = generator(z)
+#  d2 = real
+#  diff = d2 - d1
+#  epsilon = tf.random.uniform(shape=[Ns, 1, 1, 1], minval = 0., maxval = 1.)
+#  interp_input = d1 + (epsilon*diff)
+#  gradients = tf.reshape(tf.gradients(critic(interp_input), interp_input), [-1, n_x*n_y])
+#  slopes = tf.sqrt(1e-6 + tf.reduce_sum(tf.square(gradients), axis = 1))
+#  gp = tf.reduce_mean(tf.square(1 - slopes))
+#  ## not needed as there is a single element in interp_input here (the discriminator output)
+#  ## the only dimension left is the batch, which we just average over in the last step
+#  ##grad_sum = tf.reduce_sum(tf.square(gradients), axis = 1) > 1.
+#  ##grad_safe = tf.where(grad_sum, gradients, tf.ones_like(gradients))
+#  ##grad_abs = 0. * gradients
+#  ##grad_norm = tf.where(grad_sum, tf.norm(grad_safe, axis = 1), tf.reduce_sum(grad_abs, axis = 1))
+#  ##gp = tf.reduce_mean(tf.square(grad_norm - 1.0))
+#  return gp
 
 def wasserstein_loss(y_true, y_pred):
   return K.backend.mean(y_true*y_pred, axis = 0)
@@ -310,15 +310,31 @@ class RNNWGANGP(object):
     self.generator_input = Input(shape = (None, self.n_dimensions,), name = 'generator_input')
 
     xg = self.generator_input
-    xg = K.layers.recurrent.LSTM(512, return_sequences = True)(xg)
     xg = K.layers.recurrent.LSTM(256, return_sequences = True)(xg)
     xg = K.layers.recurrent.LSTM(128, return_sequences = True)(xg)
     pos_x = K.layers.TimeDistributed(K.layers.Dense(self.n_x, activation = 'softmax'))(xg)
     pos_y = K.layers.TimeDistributed(K.layers.Dense(self.n_y, activation = 'softmax'))(xg)
     energy = K.layers.TimeDistributed(K.layers.Dense(1, activation = 'relu'))(xg)
-    image = GenerateImage(self.n_x, self.n_y, self.n_pix)([pos_x, pos_y, energy])
+    xg = GenerateImage(self.n_x, self.n_y, self.n_pix)([pos_x, pos_y, energy])
 
-    self.generator = Model(self.generator_input, image, name = "generator")
+    xg = K.layers.Conv2DTranspose(32, (3,3), padding = "same", activation = None)(xg)
+    xg = K.layers.LeakyReLU(0.2)(xg)
+    xg = K.layers.Conv2DTranspose(32, (3,3), padding = "same", activation = None)(xg)
+    xg = K.layers.LeakyReLU(0.2)(xg)
+
+    xg = K.layers.Conv2DTranspose(16, (3,3), padding = "same", activation = None)(xg)
+    xg = K.layers.LeakyReLU(0.2)(xg)
+    xg = K.layers.Conv2DTranspose(16, (3,3), padding = "same", activation = None)(xg)
+    xg = K.layers.LeakyReLU(0.2)(xg)
+    #xg = K.layers.Dropout(0.5)(xg)
+
+    xg = K.layers.Conv2DTranspose(8, (3,3), padding = "same", activation = None)(xg)
+    xg = K.layers.LeakyReLU(0.2)(xg)
+    xg = K.layers.Conv2DTranspose(1, (3,3), padding = "same", activation = None)(xg)
+    xg = K.layers.LeakyReLU(0.2)(xg)
+    #xg = K.layers.Dropout(0.5)(xg)
+
+    self.generator = Model(self.generator_input, xg, name = "generator")
     self.generator.trainable = True
     self.generator.compile(loss = K.losses.mean_squared_error, optimizer = Adam(lr = 1e-4), metrics = [])
     self.generator.summary()

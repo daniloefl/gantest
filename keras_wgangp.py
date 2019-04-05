@@ -40,12 +40,11 @@ def smoothen(y):
   box = np.ones(N)/float(N)
   return np.convolve(y, box, mode = 'same')
 
-def gradient_penalty_loss(y_true, y_pred, critic, generator, z, real, N, n_x, n_y):
+def gradient_penalty_loss(y_true, y_pred, critic, generator, z, real, n_x, n_y):
   Ns = K.backend.shape(real)[0]
   d1 = generator(z)
   d2 = real
   diff = d2 - d1
-  #epsilon = K.backend.random_uniform_variable(shape=[N, 1, 1, 1], low = 0., high = 1.)
   epsilon = tf.random.uniform(shape=[Ns, 1, 1, 1], minval = 0., maxval = 1.)
   interp_input = d1 + (epsilon*diff)
   gradients = K.backend.gradients(critic(interp_input), [interp_input])[0]
@@ -54,6 +53,25 @@ def gradient_penalty_loss(y_true, y_pred, critic, generator, z, real, N, n_x, n_
   slopes = K.backend.sqrt(1e-6 + K.backend.sum(K.backend.square(gradients), axis = [1]))
   gp = K.backend.mean(K.backend.square(1 - slopes))
   return gp
+
+#def gradient_penalty_loss(y_true, y_pred, critic, generator, z, real, n_x, n_y):
+#  Ns = K.backend.shape(real)[0]
+#  d1 = generator(z)
+#  d2 = real
+#  diff = d2 - d1
+#  epsilon = tf.random.uniform(shape=[Ns, 1, 1, 1], minval = 0., maxval = 1.)
+#  interp_input = d1 + (epsilon*diff)
+#  gradients = tf.reshape(tf.gradients(critic(interp_input), interp_input), [-1, n_x*n_y])
+#  slopes = tf.sqrt(1e-6 + tf.reduce_sum(tf.square(gradients), axis = 1))
+#  gp = tf.reduce_mean(tf.square(1 - slopes))
+#  ## not needed as there is a single element in interp_input here (the discriminator output)
+#  ## the only dimension left is the batch, which we just average over in the last step
+#  ##grad_sum = tf.reduce_sum(tf.square(gradients), axis = 1) > 1.
+#  ##grad_safe = tf.where(grad_sum, gradients, tf.ones_like(gradients))
+#  ##grad_abs = 0. * gradients
+#  ##grad_norm = tf.where(grad_sum, tf.norm(grad_safe, axis = 1), tf.reduce_sum(grad_abs, axis = 1))
+#  ##gp = tf.reduce_mean(tf.square(grad_norm - 1.0))
+#  return gp
 
 def wasserstein_loss(y_true, y_pred):
   return K.backend.mean(y_true*y_pred, axis = 0)
@@ -213,7 +231,7 @@ class WGANGP(object):
     self.real_input = Input(shape = (self.n_x, self.n_y, 1), name = 'real_input')
 
     from functools import partial
-    partial_gp_loss = partial(gradient_penalty_loss, critic = self.critic, generator = self.generator, z = self.z_input, real = self.real_input, N = self.n_batch, n_x = self.n_x, n_y = self.n_y)
+    partial_gp_loss = partial(gradient_penalty_loss, critic = self.critic, generator = self.generator, z = self.z_input, real = self.real_input, n_x = self.n_x, n_y = self.n_y)
 
     wdistance = K.layers.Subtract()([self.critic(self.generator(self.z_input)),
                                      self.critic(self.real_input)])
