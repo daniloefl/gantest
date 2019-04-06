@@ -87,7 +87,7 @@ class VAE(object):
   '''
 
   def __init__(self, n_iteration = 30000,
-               n_batch = 32,
+               n_batch = 128,
                n_eval = 50,
                n_x = 28, n_y = 28,
                n_dimensions = 200):
@@ -288,7 +288,7 @@ class VAE(object):
         floss.create_dataset('kl_loss', data = self.kl_loss_train)
         floss.close()
 
-        print("Batch %5d: L_{VAE} = %10.7f ; L_{mse} = %10.7f ; L_{KL} = %10.7f" % (epoch, vae_loss, mse_loss, kl_loss))
+        print("Batch %5d: L_{VAE} = %20.16f ; L_{mse} = %20.16f ; L_{KL} = %20.16f" % (epoch, vae_loss, mse_loss, kl_loss))
         self.save("%s/%s_enc_%d" % (network_dir, prefix, epoch), "%s/%s_dec_%d" % (network_dir, prefix, epoch))
       #gc.collect()
 
