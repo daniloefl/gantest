@@ -270,8 +270,7 @@ class VAE(object):
     for epoch in range(self.n_iteration):
       x_batch = self.get_batch(size = self.n_batch)
       self.vae.train_on_batch([x_batch],
-                              [x_batch, positive_y],
-                              sample_weight = [positive_y])
+                              [x_batch, positive_y])
   
       if epoch % self.n_eval == 0:
         mse_loss = 0
