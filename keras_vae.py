@@ -277,7 +277,7 @@ class VAE(object):
         kl_loss = 0
         x_batch = self.get_batch(origin = 'test', size = self.n_batch)
 
-        tmp, mse_loss, kl_loss = self.vae.evaluate([x_batch],
+        vae_loss, mse_loss, kl_loss = self.vae.evaluate([x_batch],
                                                    [x_batch, positive_y],
                                                    sample_weight = [positive_y, positive_y], verbose = 0)
 
@@ -288,7 +288,7 @@ class VAE(object):
         floss.create_dataset('kl_loss', data = self.kl_loss_train)
         floss.close()
 
-        print("Batch %5d: L_{VAE} = %10.7f ; L_{mse} = %10.7f ; L_{KL} = %10.7f" % (epoch, mse_loss, kl_loss))
+        print("Batch %5d: L_{VAE} = %10.7f ; L_{mse} = %10.7f ; L_{KL} = %10.7f" % (epoch, vae_loss, mse_loss, kl_loss))
         self.save("%s/%s_enc_%d" % (network_dir, prefix, epoch), "%s/%s_dec_%d" % (network_dir, prefix, epoch))
       #gc.collect()
 
@@ -307,6 +307,7 @@ class VAE(object):
     it = np.arange(0, self.n_iteration, self.n_eval)
     plt.plot(it, smoothen(np.fabs(self.mse_loss_train)), color = 'b', label = r' | $\mathcal{L}_{\mathrm{mse}}$ |')
     plt.plot(it, smoothen(np.fabs(self.kl_loss_train)), color = 'grey', label = r'| $\mathcal{L}_{\mathrm{KL}}$ |' )
+    plt.plot(it, smoothen(np.fabs(self.mse_loss_train + self.kl_loss_train)), color = 'k', label = r'| $\mathcal{L}_{\mathrm{VAE}}$ |' )
     if nnTaken > 0:
       plt.axvline(x = nnTaken, color = 'r', linestyle = '--', label = 'Configuration taken for further analysis')
     ax.set(xlabel='Batches', ylabel='Loss', title='Training evolution');
