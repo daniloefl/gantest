@@ -151,11 +151,11 @@ class VAE(object):
 
     xg = self.dec_input
 
+    xg = K.layers.Dense(1024, activation = None)(xg)
+    xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Dense(512, activation = None)(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Dense(256, activation = None)(xg)
-    xg = K.layers.LeakyReLU(0.2)(xg)
-    xg = K.layers.Dense(128, activation = None)(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Dense(self.n_x*self.n_y*1, activation = None)(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
