@@ -87,10 +87,10 @@ class VAE(object):
   '''
 
   def __init__(self, n_iteration = 30000,
-               n_batch = 128,
+               n_batch = 100,
                n_eval = 50,
                n_x = 28, n_y = 28,
-               n_dimensions = 200):
+               n_dimensions = 20):
     '''
     Initialise the network.
 
@@ -115,26 +115,12 @@ class VAE(object):
 
     xc = self.enc_input
 
+    xc = K.layers.Conv2D(16, (3,3), padding = "same", activation = None)(xc)
+    xc = K.layers.LeakyReLU(0.2)(xc)
     xc = K.layers.Conv2D(32, (3,3), padding = "same", activation = None)(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
-    xc = K.layers.Conv2D(16, (3,3), padding = "same", activation = None)(xc)
-    xc = K.layers.LeakyReLU(0.2)(xc)
-    xc = K.layers.MaxPooling2D(pool_size = (2, 2))(xc)
-    #xc = K.layers.Dropout(0.5)(xc)
-
-    xc = K.layers.Conv2D(16, (3,3), padding = "same", activation = None)(xc)
-    xc = K.layers.LeakyReLU(0.2)(xc)
-    xc = K.layers.Conv2D(16, (3,3), padding = "same", activation = None)(xc)
-    xc = K.layers.LeakyReLU(0.2)(xc)
-    xc = K.layers.MaxPooling2D(pool_size = (2, 2))(xc)
-    #xc = K.layers.Dropout(0.5)(xc)
 
     xc = K.layers.Flatten()(xc)
-    xc = K.layers.Dense(512, activation = None)(xc)
-    xc = K.layers.LeakyReLU(0.2)(xc)
-    #xc = K.layers.Dropout(0.5)(xc)
-    xc = K.layers.Dense(256, activation = None)(xc)
-    xc = K.layers.LeakyReLU(0.2)(xc)
     z_mean = K.layers.Dense(self.n_dimensions, activation = None)(xc)
     z_logsigma2 = K.layers.Dense(self.n_dimensions, activation = "relu")(xc)
 
@@ -151,34 +137,18 @@ class VAE(object):
 
     xg = self.dec_input
 
-    xg = K.layers.Dense(1024, activation = None)(xg)
-    xg = K.layers.LeakyReLU(0.2)(xg)
-    xg = K.layers.Dense(512, activation = None)(xg)
-    xg = K.layers.LeakyReLU(0.2)(xg)
-    xg = K.layers.Dense(256, activation = None)(xg)
+    xg = K.layers.Dense(1568, activation = None)(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Dense(self.n_x*self.n_y*1, activation = None)(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
-    #xg = K.layers.Dropout(0.5)(xg)
 
     xg = K.layers.Reshape((self.n_x, self.n_y, 1))(xg)
 
-    xg = K.layers.Conv2DTranspose(32, (3,3), padding = "same", activation = None)(xg)
-    xg = K.layers.LeakyReLU(0.2)(xg)
-    xg = K.layers.Conv2DTranspose(32, (3,3), padding = "same", activation = None)(xg)
-    xg = K.layers.LeakyReLU(0.2)(xg)
-
     xg = K.layers.Conv2DTranspose(16, (3,3), padding = "same", activation = None)(xg)
-    xg = K.layers.LeakyReLU(0.2)(xg)
-    xg = K.layers.Conv2DTranspose(16, (3,3), padding = "same", activation = None)(xg)
-    xg = K.layers.LeakyReLU(0.2)(xg)
-    #xg = K.layers.Dropout(0.5)(xg)
-
-    xg = K.layers.Conv2DTranspose(8, (3,3), padding = "same", activation = None)(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Conv2DTranspose(1, (3,3), padding = "same", activation = None)(xg)
-    xg = K.layers.LeakyReLU(0.2)(xg)
-    #xg = K.layers.Dropout(0.5)(xg)
+    #xg = K.layers.LeakyReLU(0.2)(xg)
+    xg = K.layers.Activation('sigmoid')(xg)
 
     self.dec = Model(self.dec_input, xg, name = "dec")
     self.dec.trainable = True
@@ -207,7 +177,7 @@ class VAE(object):
     self.vae = Model(self.real_input,
                      [self.dec(self.z_generated), self.z_generated],
                      name = "vae")
-    self.vae.compile(loss = [K.losses.mean_squared_error, kldiv_loss_partial],
+    self.vae.compile(loss = [K.losses.binary_crossentropy, kldiv_loss_partial],
                      loss_weights = [1.0, 1.0],
                      optimizer = Adam(lr = 1e-4), metrics = [])
 
