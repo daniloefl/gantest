@@ -238,12 +238,12 @@ class RNNWGANGP(object):
   '''
 
   def __init__(self, n_iteration = 30000, n_critic = 5,
-               n_batch = 32,
+               n_batch = 100,
                lambda_gp = 10.0,
                n_eval = 50,
                n_x = 28, n_y = 28,
                n_pix = 128,
-               n_dimensions = 200):
+               n_dimensions = 20):
     '''
     Initialise the network.
 
@@ -310,8 +310,8 @@ class RNNWGANGP(object):
     self.generator_input = Input(shape = (None, self.n_dimensions,), name = 'generator_input')
 
     xg = self.generator_input
-    xg = K.layers.recurrent.LSTM(512, return_sequences = True)(xg)
-    xg = K.layers.recurrent.LSTM(256, return_sequences = True)(xg)
+    xg = K.layers.recurrent.LSTM(128, return_sequences = True)(xg)
+    xg = K.layers.recurrent.LSTM(64, return_sequences = True)(xg)
     pos_x = K.layers.TimeDistributed(K.layers.Dense(self.n_x, activation = 'softmax'))(xg)
     pos_y = K.layers.TimeDistributed(K.layers.Dense(self.n_y, activation = 'softmax'))(xg)
     energy = K.layers.TimeDistributed(K.layers.Dense(1, activation = 'relu'))(xg)

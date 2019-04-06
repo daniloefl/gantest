@@ -111,11 +111,11 @@ class WGANGP(object):
   '''
 
   def __init__(self, n_iteration = 30000, n_critic = 5,
-               n_batch = 32,
+               n_batch = 100,
                lambda_gp = 10.0,
                n_eval = 50,
                n_x = 28, n_y = 28,
-               n_dimensions = 200):
+               n_dimensions = 20):
     '''
     Initialise the network.
 
