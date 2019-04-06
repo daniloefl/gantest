@@ -40,9 +40,9 @@ def smoothen(y):
   box = np.ones(N)/float(N)
   return np.convolve(y, box, mode = 'same')
 
-def kldiv_loss(y_true, y_pred, z_mean, z_expsigma):
-  z_sigma = tf.log(z_expsigma)
-  return tf.reduce_mean(0.5 * tf.reduce_sum(tf.square(z_mean) + tf.square(z_sigma) - tf.log(tf.square(z_sigma)) - 1., axis = 1), axis = 0)
+def kldiv_loss(y_true, y_pred, z_mean, z_logsigma2):
+  z_sigma2 = tf.exp(z_logsigma2)
+  return tf.reduce_mean(0.5 * tf.reduce_sum(tf.square(z_mean) + z_sigma2 - z_logsigma2 - 1., axis = 1), axis = 0)
 
 class GenerateSamples(K.layers.Layer):
 
@@ -67,8 +67,8 @@ class GenerateSamples(K.layers.Layer):
 
     def call(self, inputs, training=None):
         z_mean = inputs[0]
-        z_expsigma = inputs[1]
-        z_sigma = tf.log(z_expsigma)
+        z_logsigma2 = inputs[1]
+        z_sigma = tf.sqrt(1e-7 + tf.exp(z_logsigma2))
 
         Nbatch = K.backend.shape(z_mean)[0]
         Ndim = K.backend.shape(z_mean)[1]
@@ -136,9 +136,9 @@ class VAE(object):
     xc = K.layers.Dense(256, activation = None)(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
     z_mean = K.layers.Dense(self.n_dimensions, activation = None)(xc)
-    z_expsigma = K.layers.Dense(self.n_dimensions, activation = "relu")(xc)
+    z_logsigma2 = K.layers.Dense(self.n_dimensions, activation = "relu")(xc)
 
-    self.enc = Model(self.enc_input, [z_mean, z_expsigma], name = "enc")
+    self.enc = Model(self.enc_input, [z_mean, z_logsigma2], name = "enc")
     self.enc.trainable = True
     self.enc.compile(loss = [K.losses.mean_squared_error, K.losses.mean_squared_error],
                      optimizer = Adam(lr = 1e-4), metrics = [])
@@ -198,18 +198,18 @@ class VAE(object):
 
     self.real_input = Input(shape = (self.n_x, self.n_y, 1), name = 'real_input')
 
-    self.z_mean, self.z_expsigma = self.enc(self.real_input)
-    self.z_generated = GenerateSamples()([self.z_mean, self.z_expsigma])
+    self.z_mean, self.z_logsigma2 = self.enc(self.real_input)
+    self.z_generated = GenerateSamples()([self.z_mean, self.z_logsigma2])
 
     from functools import partial
-    kldiv_loss_partial = partial(kldiv_loss, z_mean = self.z_mean, z_expsigma = self.z_expsigma)
+    kldiv_loss_partial = partial(kldiv_loss, z_mean = self.z_mean, z_logsigma2 = self.z_logsigma2)
 
     self.vae = Model(self.real_input,
                      [self.dec(self.z_generated), self.z_generated],
                      name = "vae")
     self.vae.compile(loss = [K.losses.mean_squared_error, kldiv_loss_partial],
                      loss_weights = [1.0, 1.0],
-                     optimizer = Adam(lr = 1e-4, beta_1 = 0), metrics = [])
+                     optimizer = Adam(lr = 1e-4), metrics = [])
 
     print("Encoder:")
     self.enc.trainable = True
