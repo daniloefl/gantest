@@ -234,7 +234,7 @@ class VAE(object):
     return x_batch
 
   def train(self, prefix, result_dir, network_dir):
-    self.mse_loss_train = np.array([])
+    self.rec_loss_train = np.array([])
     self.kl_loss_train = np.array([])
     positive_y = np.ones(self.n_batch)
     for epoch in range(self.n_iteration):
@@ -243,22 +243,22 @@ class VAE(object):
                               [x_batch, positive_y])
   
       if epoch % self.n_eval == 0:
-        mse_loss = 0
+        rec_loss = 0
         kl_loss = 0
         x_batch = self.get_batch(origin = 'test', size = self.n_batch)
 
-        vae_loss, mse_loss, kl_loss = self.vae.evaluate([x_batch],
+        vae_loss, rec_loss, kl_loss = self.vae.evaluate([x_batch],
                                                    [x_batch, positive_y],
                                                    sample_weight = [positive_y, positive_y], verbose = 0)
 
-        self.mse_loss_train = np.append(self.mse_loss_train, [mse_loss])
+        self.rec_loss_train = np.append(self.rec_loss_train, [rec_loss])
         self.kl_loss_train = np.append(self.kl_loss_train, [kl_loss])
         floss = h5py.File('%s/%s_loss.h5' % (result_dir, prefix), 'w')
-        floss.create_dataset('mse_loss', data = self.mse_loss_train)
+        floss.create_dataset('rec_loss', data = self.rec_loss_train)
         floss.create_dataset('kl_loss', data = self.kl_loss_train)
         floss.close()
 
-        print("Batch %5d: L_{VAE} = %20.16f ; L_{mse} = %20.16f ; L_{KL} = %20.16f" % (epoch, vae_loss, mse_loss, kl_loss))
+        print("Batch %5d: L_{VAE} = %20.16f ; L_{rec} = %20.16f ; L_{KL} = %20.16f" % (epoch, vae_loss, rec_loss, kl_loss))
         self.save("%s/%s_enc_%d" % (network_dir, prefix, epoch), "%s/%s_dec_%d" % (network_dir, prefix, epoch))
       #gc.collect()
 
@@ -266,7 +266,7 @@ class VAE(object):
 
   def load_loss(self, filename):
     floss = h5py.File(filename)
-    self.mse_loss_train = floss['mse_loss'][:]
+    self.rec_loss_train = floss['rec_loss'][:]
     self.kl_loss_train = floss['kl_loss'][:]
     self.n_iteration = self.n_eval*len(self.critic_loss_train)
     floss.close()
@@ -275,9 +275,9 @@ class VAE(object):
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(10, 8))
     it = np.arange(0, self.n_iteration, self.n_eval)
-    plt.plot(it, smoothen(np.fabs(self.mse_loss_train)), color = 'b', label = r' | $\mathcal{L}_{\mathrm{mse}}$ |')
+    plt.plot(it, smoothen(np.fabs(self.rec_loss_train)), color = 'b', label = r' | $\mathcal{L}_{\mathrm{rec}}$ |')
     plt.plot(it, smoothen(np.fabs(self.kl_loss_train)), color = 'grey', label = r'| $\mathcal{L}_{\mathrm{KL}}$ |' )
-    plt.plot(it, smoothen(np.fabs(self.mse_loss_train + self.kl_loss_train)), color = 'k', label = r'| $\mathcal{L}_{\mathrm{VAE}}$ |' )
+    plt.plot(it, smoothen(np.fabs(self.rec_loss_train + self.kl_loss_train)), color = 'k', label = r'| $\mathcal{L}_{\mathrm{VAE}}$ |' )
     if nnTaken > 0:
       plt.axvline(x = nnTaken, color = 'r', linestyle = '--', label = 'Configuration taken for further analysis')
     ax.set(xlabel='Batches', ylabel='Loss', title='Training evolution');
