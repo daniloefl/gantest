@@ -36,7 +36,7 @@ import tensorflow as tf
 mnist = K.datasets.mnist
 
 def smoothen(y):
-  N = 20
+  N = 3
   box = np.ones(N)/float(N)
   return np.convolve(y, box, mode = 'same')
 
@@ -310,8 +310,8 @@ class RNNWGANGP(object):
     self.generator_input = Input(shape = (None, self.n_dimensions,), name = 'generator_input')
 
     xg = self.generator_input
+    xg = K.layers.recurrent.LSTM(512, return_sequences = True)(xg)
     xg = K.layers.recurrent.LSTM(256, return_sequences = True)(xg)
-    xg = K.layers.recurrent.LSTM(128, return_sequences = True)(xg)
     pos_x = K.layers.TimeDistributed(K.layers.Dense(self.n_x, activation = 'softmax'))(xg)
     pos_y = K.layers.TimeDistributed(K.layers.Dense(self.n_y, activation = 'softmax'))(xg)
     energy = K.layers.TimeDistributed(K.layers.Dense(1, activation = 'relu'))(xg)
@@ -366,7 +366,7 @@ class RNNWGANGP(object):
                                    name = "gen_fixed_critic")
     self.gen_fixed_critic.compile(loss = [wasserstein_loss, partial_gp_loss],
                                    loss_weights = [1.0, self.lambda_gp],
-                                   optimizer = Adam(lr = 1e-4, beta_1 = 0), metrics = [])
+                                   optimizer = Adam(lr = 1e-3), metrics = [])
 
     self.generator.trainable = True
     self.critic.trainable = False
@@ -375,7 +375,7 @@ class RNNWGANGP(object):
                                    name = "gen_critic_fixed")
     self.gen_critic_fixed.compile(loss = [wasserstein_loss],
                                    loss_weights = [-1.0],
-                                   optimizer = Adam(lr = 1e-4, beta_1 = 0), metrics = [])
+                                   optimizer = Adam(lr = 1e-3), metrics = [])
 
 
     print("Generator:")

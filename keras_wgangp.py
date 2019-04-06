@@ -36,7 +36,7 @@ import tensorflow as tf
 mnist = K.datasets.mnist
 
 def smoothen(y):
-  N = 20
+  N = 3
   box = np.ones(N)/float(N)
   return np.convolve(y, box, mode = 'same')
 
@@ -241,7 +241,7 @@ class WGANGP(object):
                                    name = "gen_fixed_critic")
     self.gen_fixed_critic.compile(loss = [wasserstein_loss, partial_gp_loss],
                                    loss_weights = [1.0, self.lambda_gp],
-                                   optimizer = Adam(lr = 1e-4, beta_1 = 0), metrics = [])
+                                   optimizer = Adam(lr = 1e-3), metrics = [])
 
     self.generator.trainable = True
     self.critic.trainable = False
@@ -250,7 +250,7 @@ class WGANGP(object):
                                    name = "gen_critic_fixed")
     self.gen_critic_fixed.compile(loss = [wasserstein_loss],
                                    loss_weights = [-1.0],
-                                   optimizer = Adam(lr = 1e-4, beta_1 = 0), metrics = [])
+                                   optimizer = Adam(lr = 1e-3), metrics = [])
 
 
     print("Generator:")

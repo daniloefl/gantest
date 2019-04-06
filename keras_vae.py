@@ -36,7 +36,7 @@ import tensorflow as tf
 mnist = K.datasets.mnist
 
 def smoothen(y):
-  N = 20
+  N = 3
   box = np.ones(N)/float(N)
   return np.convolve(y, box, mode = 'same')
 
