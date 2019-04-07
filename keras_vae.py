@@ -96,8 +96,8 @@ class VAE(object):
   1) Minimize the reconstruction loss and the KL-loss simultaneously
   '''
 
-  def __init__(self, n_iteration = 30000,
-               n_batch = 100,
+  def __init__(self, n_iteration = 5000,
+               n_batch = 128,
                n_eval = 50,
                n_x = 28, n_y = 28,
                n_dimensions = 20):
@@ -125,9 +125,9 @@ class VAE(object):
 
     xc = self.enc_input
 
-    xc = K.layers.Conv2D(16, (3,3), padding = "same", activation = None)(xc)
+    xc = K.layers.Conv2D(16, (5,5), padding = "same", strides = [1,2,2,1], activation = None)(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
-    xc = K.layers.Conv2D(32, (3,3), padding = "same", activation = None)(xc)
+    xc = K.layers.Conv2D(32, (5,5), padding = "same", strides = [1,2,2,1], activation = None)(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
 
     xc = K.layers.Flatten()(xc)
@@ -154,9 +154,9 @@ class VAE(object):
 
     xg = K.layers.Reshape((self.n_x, self.n_y, 1))(xg)
 
-    xg = K.layers.Conv2DTranspose(16, (3,3), padding = "same", activation = None)(xg)
+    xg = K.layers.Conv2DTranspose(16, (5,5), padding = "same", strides = [1,2,2,1], activation = None)(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
-    xg = K.layers.Conv2DTranspose(1, (3,3), padding = "same", activation = None)(xg)
+    xg = K.layers.Conv2DTranspose(1, (5,5), padding = "same", strides = [1,2,2,1], activation = None)(xg)
     #xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Activation('sigmoid')(xg)
 
