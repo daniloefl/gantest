@@ -134,12 +134,28 @@ class VAE(object):
 
     xc = self.enc_input
 
-    xc = K.layers.Conv2D(16, (5,5), padding = "same", activation = None)(xc)
+    xc = K.layers.Conv2D(32, (3,3), padding = "same", activation = None)(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
-    xc = K.layers.Conv2D(32, (5,5), padding = "same", activation = None)(xc)
+    xc = K.layers.Conv2D(16, (3,3), padding = "same", activation = None)(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
+    xc = K.layers.MaxPooling2D(pool_size = (2, 2))(xc)
+
+    xc = K.layers.Conv2D(16, (3,3), padding = "same", activation = None)(xc)
+    xc = K.layers.LeakyReLU(0.2)(xc)
+    xc = K.layers.Conv2D(16, (3,3), padding = "same", activation = None)(xc)
+    xc = K.layers.LeakyReLU(0.2)(xc)
+    xc = K.layers.MaxPooling2D(pool_size = (2, 2))(xc)
 
     xc = K.layers.Flatten()(xc)
+
+    xc = K.layers.Dense(512, activation = None, name = "adv_6")(xc)
+    xc = K.layers.LeakyReLU(0.2)(xc)
+    #xc = K.layers.Dropout(0.5)(xc)
+    xc = K.layers.Dense(128, activation = None, name = "adv_7")(xc)
+    xc = K.layers.LeakyReLU(0.2)(xc)
+    xc = K.layers.Dense(64, activation = None, name = "adv_8")(xc)
+    xc = K.layers.LeakyReLU(0.2)(xc)
+
     z_mean = K.layers.Dense(self.n_dimensions, activation = None)(xc)
     z_logsigma2 = K.layers.Dense(self.n_dimensions, activation = None)(xc)
 
@@ -156,18 +172,32 @@ class VAE(object):
 
     xg = self.dec_input
 
-    xg = K.layers.Dense(7*7*32, activation = None)(xg)
+    xg = K.layers.Dense(512, activation = None)(xg)
+    xg = K.layers.LeakyReLU(0.2)(xg)
+    xg = K.layers.Dense(256, activation = None)(xg)
+    xg = K.layers.LeakyReLU(0.2)(xg)
+    xg = K.layers.Dense(256, activation = None)(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Dense(self.n_x*self.n_y*1, activation = None)(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
 
     xg = K.layers.Reshape((self.n_x, self.n_y, 1))(xg)
 
-    xg = K.layers.Conv2DTranspose(16, (5,5), padding = "same", activation = None)(xg)
+    xg = K.layers.Conv2DTranspose(32, (3,3), padding = "same", activation = None)(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
-    xg = K.layers.Conv2DTranspose(1, (5,5), padding = "same", activation = None)(xg)
+    xg = K.layers.Conv2DTranspose(32, (3,3), padding = "same", activation = None)(xg)
+    xg = K.layers.LeakyReLU(0.2)(xg)
+
+    xg = K.layers.Conv2DTranspose(16, (3,3), padding = "same", activation = None)(xg)
+    xg = K.layers.LeakyReLU(0.2)(xg)
+    xg = K.layers.Conv2DTranspose(16, (3,3), padding = "same", activation = None)(xg)
+    xg = K.layers.LeakyReLU(0.2)(xg)
+
+    xg = K.layers.Conv2DTranspose(8, (3,3), padding = "same", activation = None)(xg)
     #xg = K.layers.LeakyReLU(0.2)(xg)
-    xg = K.layers.Activation('sigmoid')(xg)
+    xg = K.layers.Conv2DTranspose(1, (3,3), padding = "same", activation = None)(xg)
+    xg = K.layers.ReLU()(xg)
+    #xg = K.layers.Activation('sigmoid')(xg)
 
     self.dec = Model(self.dec_input, xg, name = "dec")
     self.dec.trainable = True
