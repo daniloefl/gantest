@@ -36,6 +36,7 @@ import tensorflow as tf
 mnist = K.datasets.mnist
 
 def smoothen(y):
+  return y
   N = 3
   box = np.ones(N)/float(N)
   return np.convolve(y, box, mode = 'same')
@@ -277,7 +278,7 @@ class VAE(object):
     floss = h5py.File(filename)
     self.rec_loss_train = floss['rec_loss'][:]
     self.kl_loss_train = floss['kl_loss'][:]
-    self.n_iteration = self.n_eval*len(self.critic_loss_train)
+    self.n_iteration = self.n_eval*len(self.rec_loss_train)
     floss.close()
 
   def plot_train_metrics(self, filename, nnTaken = -1):
@@ -290,7 +291,7 @@ class VAE(object):
     if nnTaken > 0:
       plt.axvline(x = nnTaken, color = 'r', linestyle = '--', label = 'Configuration taken for further analysis')
     ax.set(xlabel='Batches', ylabel='Loss', title='Training evolution');
-    ax.set_ylim([1e-1, 100])
+    ax.set_ylim([1e-4, 1])
     ax.set_yscale('log')
     plt.legend(frameon = False)
     plt.savefig(filename)
