@@ -256,10 +256,10 @@ class VAE(object):
         kl_loss = 0
         x_batch = self.get_batch(origin = 'test', size = self.n_batch)
 
-        vae_loss, rec_loss, kl_loss = self.vae.evaluate([x_batch],
-                                                   [x_batch, positive_y, positive_y],
-                                                   sample_weight = [positive_y, positive_y, positive_y], verbose = 0)
-
+        vae_loss, rec_loss, kl_loss_mean, kl_loss_stddev = self.vae.evaluate([x_batch],
+                                                                             [x_batch, positive_y, positive_y],
+                                                                             verbose = 0)
+        kl_loss = kl_loss_mean + kl_loss_stddev
         self.rec_loss_train = np.append(self.rec_loss_train, [rec_loss])
         self.kl_loss_train = np.append(self.kl_loss_train, [kl_loss])
         floss = h5py.File('%s/%s_loss.h5' % (result_dir, prefix), 'w')
