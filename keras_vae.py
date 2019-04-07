@@ -330,7 +330,7 @@ class VAE(object):
     if nnTaken > 0:
       plt.axvline(x = nnTaken, color = 'r', linestyle = '--', label = 'Configuration taken for further analysis')
     ax.set(xlabel='Batches', ylabel='Loss', title='Training evolution');
-    ax.set_ylim([1e-4, 1])
+    ax.set_ylim([1e-1, 100])
     ax.set_yscale('log')
     plt.legend(frameon = False)
     plt.savefig(filename)
