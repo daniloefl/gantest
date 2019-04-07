@@ -36,6 +36,7 @@ import tensorflow as tf
 mnist = K.datasets.mnist
 
 def smoothen(y):
+  return y
   N = 3
   box = np.ones(N)/float(N)
   return np.convolve(y, box, mode = 'same')
@@ -185,7 +186,7 @@ class WGANGP(object):
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Dense(256, activation = None, name = "gen_1")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
-    xg = K.layers.Dense(128, activation = None, name = "gen_2")(xg)
+    xg = K.layers.Dense(256, activation = None, name = "gen_2")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Dense(self.n_x*self.n_y*1, activation = None, name = "gen_3")(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
