@@ -125,9 +125,9 @@ class VAE(object):
 
     xc = self.enc_input
 
-    xc = K.layers.Conv2D(16, (5,5), padding = "same", strides = [2,2], activation = None)(xc)
+    xc = K.layers.Conv2D(16, (5,5), padding = "same", activation = None)(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
-    xc = K.layers.Conv2D(32, (5,5), padding = "same", strides = [2,2], activation = None)(xc)
+    xc = K.layers.Conv2D(32, (5,5), padding = "same", activation = None)(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
 
     xc = K.layers.Flatten()(xc)
@@ -154,9 +154,9 @@ class VAE(object):
 
     xg = K.layers.Reshape((self.n_x, self.n_y, 1))(xg)
 
-    xg = K.layers.Conv2DTranspose(16, (5,5), padding = "same", strides = [2,2], activation = None)(xg)
+    xg = K.layers.Conv2DTranspose(16, (5,5), padding = "same", activation = None)(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
-    xg = K.layers.Conv2DTranspose(1, (5,5), padding = "same", strides = [2,2], activation = None)(xg)
+    xg = K.layers.Conv2DTranspose(1, (5,5), padding = "same", activation = None)(xg)
     #xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Activation('sigmoid')(xg)
 
