@@ -54,6 +54,15 @@ def kldiv_loss_stddev(y_true, y_pred):
   z_sigma2 = tf.exp(z_logsigma2)
   return tf.reduce_mean(0.5 * tf.reduce_sum(z_sigma2 - z_logsigma2, axis = 1), axis = 0)
 
+def rec_loss(y_true, y_pred):
+  n_x = tf.shape(y_true)[1]
+  n_y = tf.shape(y_true)[2]
+  n_l = tf.shape(y_true)[3]
+  N = n_x*n_y*n_l
+  y_true_r = tf.reshape(y_true, [-1, N])
+  y_pred_r = tf.reshape(y_pred, [-1, N])
+  return tf.reduce_mean(tf.reduce_sum(tf.square(y_pred_r - y_true_r), axis = 1), axis = 0)
+
 class GenerateSamples(K.layers.Layer):
 
     def __init__(self,
@@ -187,7 +196,7 @@ class VAE(object):
     self.vae = Model(self.real_input,
                      [self.dec(self.z_generated), self.z_mean, self.z_logsigma2],
                      name = "vae")
-    self.vae.compile(loss = [K.losses.binary_crossentropy, kldiv_loss_mean, kldiv_loss_stddev],
+    self.vae.compile(loss = [rec_loss, kldiv_loss_mean, kldiv_loss_stddev],
                      loss_weights = [1.0, 1.0, 1.0],
                      optimizer = Adam(lr = 1e-3), metrics = [])
 
