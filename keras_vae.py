@@ -44,6 +44,15 @@ def kldiv_loss(y_true, y_pred, z_mean, z_logsigma2):
   z_sigma2 = tf.exp(z_logsigma2)
   return tf.reduce_mean(0.5 * tf.reduce_sum(tf.square(z_mean) + z_sigma2 - z_logsigma2 - 1., axis = 1), axis = 0)
 
+def kldiv_loss_mean(y_true, y_pred):
+  z_mean = y_pred
+  return tf.reduce_mean(0.5 * tf.reduce_sum(tf.square(z_mean) - 1., axis = 1), axis = 0)
+
+def kldiv_loss_stddev(y_true, y_pred):
+  z_logsigma2 = y_pred
+  z_sigma2 = tf.exp(z_logsigma2)
+  return tf.reduce_mean(0.5 * tf.reduce_sum(z_sigma2 - z_logsigma2, axis = 1), axis = 0)
+
 class GenerateSamples(K.layers.Layer):
 
     def __init__(self,
@@ -122,12 +131,12 @@ class VAE(object):
 
     xc = K.layers.Flatten()(xc)
     z_mean = K.layers.Dense(self.n_dimensions, activation = None)(xc)
-    z_logsigma2 = K.layers.Dense(self.n_dimensions, activation = "relu")(xc)
+    z_logsigma2 = K.layers.Dense(self.n_dimensions, activation = None)(xc)
 
     self.enc = Model(self.enc_input, [z_mean, z_logsigma2], name = "enc")
     self.enc.trainable = True
     self.enc.compile(loss = [K.losses.mean_squared_error, K.losses.mean_squared_error],
-                     optimizer = Adam(lr = 1e-4), metrics = [])
+                     optimizer = Adam(lr = 1e-3), metrics = [])
 
   '''
   Create decoder network.
@@ -137,7 +146,7 @@ class VAE(object):
 
     xg = self.dec_input
 
-    xg = K.layers.Dense(1568, activation = None)(xg)
+    xg = K.layers.Dense(7*7*32, activation = None)(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
     xg = K.layers.Dense(self.n_x*self.n_y*1, activation = None)(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
@@ -175,11 +184,11 @@ class VAE(object):
     kldiv_loss_partial = partial(kldiv_loss, z_mean = self.z_mean, z_logsigma2 = self.z_logsigma2)
 
     self.vae = Model(self.real_input,
-                     [self.dec(self.z_generated), self.z_generated],
+                     [self.dec(self.z_generated), self.z_mean, self.z_logsigma2],
                      name = "vae")
-    self.vae.compile(loss = [K.losses.binary_crossentropy, kldiv_loss_partial],
-                     loss_weights = [1.0, 1.0],
-                     optimizer = Adam(lr = 1e-4), metrics = [])
+    self.vae.compile(loss = [K.losses.binary_crossentropy, kldiv_loss_mean, kldiv_loss_stddev],
+                     loss_weights = [1.0, 1.0, 1.0],
+                     optimizer = Adam(lr = 1e-3), metrics = [])
 
     print("Encoder:")
     self.enc.trainable = True
@@ -240,7 +249,7 @@ class VAE(object):
     for epoch in range(self.n_iteration):
       x_batch = self.get_batch(size = self.n_batch)
       self.vae.train_on_batch([x_batch],
-                              [x_batch, positive_y])
+                              [x_batch, positive_y, positive_y])
   
       if epoch % self.n_eval == 0:
         rec_loss = 0
@@ -248,8 +257,8 @@ class VAE(object):
         x_batch = self.get_batch(origin = 'test', size = self.n_batch)
 
         vae_loss, rec_loss, kl_loss = self.vae.evaluate([x_batch],
-                                                   [x_batch, positive_y],
-                                                   sample_weight = [positive_y, positive_y], verbose = 0)
+                                                   [x_batch, positive_y, positive_y],
+                                                   sample_weight = [positive_y, positive_y, positive_y], verbose = 0)
 
         self.rec_loss_train = np.append(self.rec_loss_train, [rec_loss])
         self.kl_loss_train = np.append(self.kl_loss_train, [kl_loss])
