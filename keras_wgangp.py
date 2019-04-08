@@ -48,10 +48,10 @@ def gradient_penalty_loss(y_true, y_pred, critic, generator, z, real, n_x, n_y):
   diff = d2 - d1
   epsilon = tf.random.uniform(shape=[Ns, 1, 1, 1], minval = 0., maxval = 1.)
   interp_input = d1 + (epsilon*diff)
-  gradients = K.backend.gradients(critic(interp_input), [interp_input])[0]
+  gradients = K.backend.gradients(critic(interp_input), [interp_input])[0] # shape = (None, 28, 28, 1)
   ## not needed as there is a single element in interp_input here (the discriminator output)
   ## the only dimension left is the batch, which we just average over in the last step
-  slopes = K.backend.sqrt(1e-6 + K.backend.sum(K.backend.square(gradients), axis = [1]))
+  slopes = K.backend.sqrt(1e-7 + K.backend.sum(K.backend.square(gradients), axis = [1, 2, 3]))
   gp = K.backend.mean(K.backend.square(1 - slopes))
   return gp
 
@@ -242,7 +242,7 @@ class WGANGP(object):
                                    name = "gen_fixed_critic")
     self.gen_fixed_critic.compile(loss = [wasserstein_loss, partial_gp_loss],
                                    loss_weights = [1.0, self.lambda_gp],
-                                   optimizer = Adam(lr = 1e-3), metrics = [])
+                                   optimizer = Adam(lr = 1e-4), metrics = [])
 
     self.generator.trainable = True
     self.critic.trainable = False
@@ -251,7 +251,7 @@ class WGANGP(object):
                                    name = "gen_critic_fixed")
     self.gen_critic_fixed.compile(loss = [wasserstein_loss],
                                    loss_weights = [-1.0],
-                                   optimizer = Adam(lr = 1e-3), metrics = [])
+                                   optimizer = Adam(lr = 1e-4), metrics = [])
 
 
     print("Generator:")
