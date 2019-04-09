@@ -291,7 +291,7 @@ class WGANGP(object):
     plt.savefig(filename)
     plt.close("all")
 
-  def plot_generator_output(self, filename):
+  def plot_generator_output(self, filename, network_batch = 0):
     import matplotlib.pyplot as plt
     import seaborn as sns
     fig, ax = plt.subplots(figsize = (20, 20), nrows = 5, ncols = 5)
@@ -301,6 +301,7 @@ class WGANGP(object):
       for j in range(5):
         sns.heatmap(out[j+5*i,:,:,0], vmax = .8, square = True, ax = ax[i, j])
         ax[i, j].set(xlabel = '', ylabel = '', title = '');
+    fig.suptitle('Output after batch %d' % network_batch)
     plt.savefig(filename)
     plt.close("all")
 
@@ -401,15 +402,23 @@ class WGANGP(object):
     self.n_iteration = self.n_eval*len(self.critic_loss_train)
     floss.close()
 
-  def plot_train_metrics(self, filename, nnTaken = -1):
+  def plot_train_metrics(self, filename, nnTaken = -1, epochs = True):
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(10, 8))
-    it = np.arange(0, self.n_iteration, self.n_eval)
+    it = np.arange(0, self.n_iteration, self.n_eval, dtype = np.float32)
+    s = 1.0
+    if epochs:
+      Ntrain = self.x_train.shape[0]
+      s = float(self.n_batch)/float(Ntrain)
+    it *= s
     plt.plot(it, smoothen(np.fabs(-self.critic_loss_train)), color = 'b', label = r' | $\mathcal{L}_{\mathrm{critic}} |$')
     plt.plot(it, smoothen(self.lambda_gp*self.critic_gp_loss_train), color = 'grey', label = r'$\lambda_{\mathrm{gp}} (||\nabla_{\hat{x}} C(\hat{x})||_{2} - 1)^2$')
     if nnTaken > 0:
-      plt.axvline(x = nnTaken, color = 'r', linestyle = '--', label = 'Configuration taken for further analysis')
-    ax.set(xlabel='Batches', ylabel='Loss', title='Training evolution');
+      plt.axvline(x = nnTaken*s, color = 'r', linestyle = '--', label = 'Configuration taken for further analysis')
+    if epochs:
+      ax.set(xlabel='Epoch', ylabel='Loss', title='Training evolution');
+    else:
+      ax.set(xlabel='Batches', ylabel='Loss', title='Training evolution');
     ax.set_ylim([1e-2, 10])
     ax.set_yscale('log')
     plt.legend(frameon = False)
@@ -426,7 +435,10 @@ class WGANGP(object):
     plt.plot(it, smoothen(-fac*self.critic_loss_real_train), color = 'c', label = r' $ %4.2f \mathcal{L}_{\mathrm{critic,real}}$' % (-fac) )
     if nnTaken > 0:
       plt.axvline(x = nnTaken, color = 'r', linestyle = '--', label = 'Configuration taken for further analysis')
-    ax.set(xlabel='Batches', ylabel='Loss', title='Training evolution');
+    if epochs:
+      ax.set(xlabel='Epoch', ylabel='Loss', title='Training evolution');
+    else:
+      ax.set(xlabel='Batches', ylabel='Loss', title='Training evolution');
     ax.set_ylim([-1, 1])
     plt.legend(frameon = False)
     filename_crit = filename.replace('.pdf', '_critic_split.pdf')
@@ -537,7 +549,11 @@ def main():
   elif args.mode == 'plot_gen':
     print("Loading network.")
     network.load_generator("%s/%s_generator_%s" % (args.network_dir, prefix, trained))
-    network.plot_generator_output("%s/%s_generator_output.pdf" % (args.result_dir, prefix))
+    network.plot_generator_output("%s/%s_generator_output.pdf" % (args.result_dir, prefix), trained)
+    from shutil import copyfile
+    for suf in ['h5', 'json']:
+      copyfile("%s/%s_generator_%s.%s" % (args.network_dir, prefix, trained, suf), "%s/%s_generator.%s" % (args.result_dir, prefix, suf))
+      copyfile("%s/%s_critic_%s.%s" % (args.network_dir, prefix, trained, suf), "%s/%s_critic.%s" % (args.result_dir, prefix, suf))
   elif args.mode == 'plot_data':
     network.plot_data("%s/%s_data.pdf" % (args.result_dir, prefix))
   else:
