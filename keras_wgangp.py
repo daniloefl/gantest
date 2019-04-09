@@ -549,7 +549,7 @@ def main():
   elif args.mode == 'plot_gen':
     print("Loading network.")
     network.load_generator("%s/%s_generator_%s" % (args.network_dir, prefix, trained))
-    network.plot_generator_output("%s/%s_generator_output.pdf" % (args.result_dir, prefix), trained)
+    network.plot_generator_output("%s/%s_generator_output.pdf" % (args.result_dir, prefix), int(trained))
     from shutil import copyfile
     for suf in ['h5', 'json']:
       copyfile("%s/%s_generator_%s.%s" % (args.network_dir, prefix, trained, suf), "%s/%s_generator.%s" % (args.result_dir, prefix, suf))

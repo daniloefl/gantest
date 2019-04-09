@@ -448,7 +448,7 @@ def main():
   elif args.mode == 'plot_gen':
     print("Loading network.")
     network.load_decoder("%s/%s_dec_%s" % (args.network_dir, prefix, trained))
-    network.plot_decoder_output("%s/%s_decoder_output.pdf" % (args.result_dir, prefix))
+    network.plot_decoder_output("%s/%s_decoder_output.pdf" % (args.result_dir, prefix), int(trained))
     from shutil import copyfile
     for suf in ['h5', 'json']:
       copyfile("%s/%s_decoder_%s.%s" % (args.network_dir, prefix, trained, suf), "%s/%s_decoder.%s" % (args.result_dir, prefix, suf))
