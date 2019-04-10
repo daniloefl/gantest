@@ -451,8 +451,8 @@ def main():
     network.plot_decoder_output("%s/%s_decoder_output.pdf" % (args.result_dir, prefix), int(trained))
     from shutil import copyfile
     for suf in ['h5', 'json']:
-      copyfile("%s/%s_decoder_%s.%s" % (args.network_dir, prefix, trained, suf), "%s/%s_decoder.%s" % (args.result_dir, prefix, suf))
-      copyfile("%s/%s_encoder_%s.%s" % (args.network_dir, prefix, trained, suf), "%s/%s_encoder.%s" % (args.result_dir, prefix, suf))
+      copyfile("%s/%s_dec_%s.%s" % (args.network_dir, prefix, trained, suf), "%s/%s_dec.%s" % (args.result_dir, prefix, suf))
+      copyfile("%s/%s_enc_%s.%s" % (args.network_dir, prefix, trained, suf), "%s/%s_enc.%s" % (args.result_dir, prefix, suf))
   elif args.mode == 'plot_data':
     network.plot_data("%s/%s_data.pdf" % (args.result_dir, prefix))
   else:

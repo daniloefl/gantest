@@ -82,7 +82,7 @@ class GenerateImage(K.layers.Layer):
     def __init__(self,
                  n_x = 28,
                  n_y = 28,
-                 n_pix = 128,
+                 n_pix = 256,
                  **kwargs):
         """Generate image from positions
         :param n_x: Size in x.
@@ -243,7 +243,7 @@ class RNNWGANGP(object):
                lambda_gp = 10.0,
                n_eval = 50,
                n_x = 28, n_y = 28,
-               n_pix = 128,
+               n_pix = 256,
                n_dimensions = 20):
     '''
     Initialise the network.
