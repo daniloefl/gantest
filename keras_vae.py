@@ -62,6 +62,7 @@ def rec_loss(y_true, y_pred):
   y_true_r = tf.reshape(y_true, [-1, N])
   y_pred_r = tf.reshape(y_pred, [-1, N])
   return tf.reduce_mean(tf.reduce_sum(tf.square(y_pred_r - y_true_r), axis = 1), axis = 0)
+  #return tf.cast(N, tf.float32)*K.losses.binary_crossentropy(y_true_r, y_pred_r)
 
 class GenerateSamples(K.layers.Layer):
 
@@ -105,7 +106,7 @@ class VAE(object):
   1) Minimize the reconstruction loss and the KL-loss simultaneously
   '''
 
-  def __init__(self, n_iteration = 5000,
+  def __init__(self, n_iteration = 20000,
                n_batch = 128,
                n_eval = 50,
                n_x = 28, n_y = 28,
@@ -228,7 +229,7 @@ class VAE(object):
                      name = "vae")
     self.vae.compile(loss = [rec_loss, kldiv_loss_mean, kldiv_loss_stddev],
                      loss_weights = [1.0, 1.0, 1.0],
-                     optimizer = Adam(lr = 1e-3), metrics = [])
+                     optimizer = Adam(lr = 1e-4), metrics = [])
 
     print("Encoder:")
     self.enc.trainable = True
