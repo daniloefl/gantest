@@ -236,7 +236,7 @@ class RNNVAE(object):
                n_batch = 128,
                n_eval = 50,
                n_x = 28, n_y = 28,
-               n_dimensions = 20):
+               n_dimensions = 256):
     '''
     Initialise the network.
 
@@ -301,7 +301,6 @@ class RNNVAE(object):
 
     xg = K.layers.Reshape((self.n_dimensions, 1))(xg)
 
-    xg = K.layers.recurrent.LSTM(512, return_sequences = True)(xg)
     xg = K.layers.recurrent.LSTM(256, return_sequences = True)(xg)
     xg = K.layers.recurrent.LSTM(128, return_sequences = True)(xg)
     pos_x = K.layers.TimeDistributed(K.layers.Dense(self.n_x, activation = 'softmax'))(xg)
