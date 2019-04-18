@@ -490,7 +490,7 @@ class RNNVAE(object):
     json_file = open('%s.json' % dec_filename, 'r')
     loaded_model_json = json_file.read()
     json_file.close()
-    self.dec = K.models.model_from_json(loaded_model_json, custom_objects={'LayerNormalization': LayerNormalization})
+    self.dec = K.models.model_from_json(loaded_model_json, custom_objects={'LayerNormalization': LayerNormalization, 'GenerateImage': GenerateImage})
     self.dec.load_weights("%s.h5" % dec_filename)
     #self.dec.compile(loss = K.losses.mean_squared_error, optimizer = K.optimizers.Adam(lr = 1e-4), metrics = [])
 
@@ -507,7 +507,7 @@ class RNNVAE(object):
     json_file = open('%s.json' % dec_filename, 'r')
     loaded_model_json = json_file.read()
     json_file.close()
-    self.dec = K.models.model_from_json(loaded_model_json, custom_objects = {'LayerNormalization': LayerNormalization})
+    self.dec = K.models.model_from_json(loaded_model_json, custom_objects = {'LayerNormalization': LayerNormalization, 'GenerateImage': GenerateImage})
     self.dec.load_weights("%s.h5" % dec_filename)
 
     self.enc_input = Input(shape = (self.n_x, self.n_y, 1), name = 'enc_input')
