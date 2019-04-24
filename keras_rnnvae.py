@@ -236,7 +236,8 @@ class RNNVAE(object):
                n_batch = 128,
                n_eval = 50,
                n_x = 28, n_y = 28,
-               n_dimensions = 256):
+               n_dimensions = 20,
+               n_pix = 256):
     '''
     Initialise the network.
 
@@ -252,6 +253,7 @@ class RNNVAE(object):
     self.n_x = n_x
     self.n_y = n_y
     self.n_dimensions = n_dimensions
+    self.n_pix = n_pix
 
   '''
     Create encoder network.
@@ -283,8 +285,8 @@ class RNNVAE(object):
     xc = K.layers.Dense(64, activation = None, name = "adv_8")(xc)
     xc = K.layers.LeakyReLU(0.2)(xc)
 
-    z_mean = K.layers.Dense(self.n_dimensions, activation = None)(xc)
-    z_logsigma2 = K.layers.Dense(self.n_dimensions, activation = None)(xc)
+    z_mean = K.layers.Dense(self.n_dimensions*self.n_pix, activation = None)(xc)
+    z_logsigma2 = K.layers.Dense(self.n_dimensions*self.n_pix, activation = None)(xc)
 
     self.enc = Model(self.enc_input, [z_mean, z_logsigma2], name = "enc")
     self.enc.trainable = True
@@ -295,18 +297,18 @@ class RNNVAE(object):
   Create decoder network.
   '''
   def create_dec(self):
-    self.dec_input = Input(shape = (self.n_dimensions,), name = 'dec_input')
+    self.dec_input = Input(shape = (self.n_dimensions*self.n_pix,), name = 'dec_input')
 
     xg = self.dec_input
 
-    xg = K.layers.Reshape((self.n_dimensions, 1))(xg)
+    xg = K.layers.Reshape((self.n_pix, self.n_dimensions))(xg)
 
     xg = K.layers.recurrent.LSTM(256, return_sequences = True)(xg)
     xg = K.layers.recurrent.LSTM(128, return_sequences = True)(xg)
     pos_x = K.layers.TimeDistributed(K.layers.Dense(self.n_x, activation = 'softmax'))(xg)
     pos_y = K.layers.TimeDistributed(K.layers.Dense(self.n_y, activation = 'softmax'))(xg)
     energy = K.layers.TimeDistributed(K.layers.Dense(1, activation = 'relu'))(xg)
-    xg = GenerateImage(self.n_x, self.n_y, self.n_dimensions)([pos_x, pos_y, energy])
+    xg = GenerateImage(self.n_x, self.n_y, self.n_pix)([pos_x, pos_y, energy])
 
     xg = K.layers.Conv2DTranspose(32, (3,3), padding = "same", activation = None)(xg)
     xg = K.layers.LeakyReLU(0.2)(xg)
@@ -391,7 +393,7 @@ class RNNVAE(object):
     import matplotlib.pyplot as plt
     import seaborn as sns
     fig, ax = plt.subplots(figsize = (20, 20), nrows = 5, ncols = 5)
-    z = np.random.normal(loc = 0.0, scale = 1.0, size = (5*5, self.n_dimensions,))
+    z = np.random.normal(loc = 0.0, scale = 1.0, size = (5*5, self.n_dimensions*self.n_pix,))
     out = self.dec.predict(z, verbose = 0)
     for i in range(5):
       for j in range(5):
@@ -511,7 +513,7 @@ class RNNVAE(object):
     self.dec.load_weights("%s.h5" % dec_filename)
 
     self.enc_input = Input(shape = (self.n_x, self.n_y, 1), name = 'enc_input')
-    self.dec_input = Input(shape = (self.n_dimensions,), name = 'dec_input')
+    self.dec_input = Input(shape = (self.n_dimensions*self.n_pix,), name = 'dec_input')
 
     self.enc.compile(loss = [K.losses.mean_squared_error, K.losses.mean_squared_error], optimizer = K.optimizers.Adam(lr = 1e-4), metrics = [])
     self.dec.compile(loss = K.losses.mean_squared_error, optimizer = K.optimizers.Adam(lr = 1e-4), metrics = [])
