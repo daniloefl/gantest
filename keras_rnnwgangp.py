@@ -246,7 +246,7 @@ class GenerateImage(K.layers.Layer):
         energy_tiled = tf.tile(energy, [1, 1, self.n_x*self.n_y])
 
         # now sum all pixels
-        image = tf.reduce_sum(pos_rows * energy_tiled, axis = 1) # sums over pixels, as the shape of both is (Nbatch, Npix, nx*ny)
+        image = tf.reduce_sum(pos_xy * energy_tiled, axis = 1) # sums over pixels, as the shape of both is (Nbatch, Npix, nx*ny)
         image = tf.reshape(image, [Nbatch, self.n_x, self.n_y, 1]) # add axis for layer
 
         # End -----
