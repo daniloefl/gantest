@@ -176,29 +176,61 @@ class GenerateImage(K.layers.Layer):
 
         ####### End -----
 
-        # This is the new setup:
-        # if the pos_x and pos_y layers generate a softmax output (shape = (Nbatch, Npix, nx/y))
+        ## This is the new setup:
+        ## if the pos_x and pos_y layers generate a softmax output (shape = (Nbatch, Npix, nx/y))
+        ## Begin -----
+        #pos_x = inputs[0]
+        #pos_y = inputs[1]
+        #energy = inputs[2]
+        ## get batch size
+        #Nbatch = K.backend.shape(energy)[0]
+        ## get number of pixels
+        #Npix = self.n_pix # K.backend.shape(energy)[1]
+
+        #pos_x_tiled = tf.tile(tf.reshape(pos_x, [Nbatch, Npix, self.n_x, 1]), [1, 1, 1, self.n_y])
+        #pos_y_tiled = tf.tile(tf.reshape(pos_y, [Nbatch, Npix, 1, self.n_y]), [1, 1, self.n_x, 1])
+        #pos_rows = pos_x_tiled*pos_y_tiled
+
+        ## now pos_rows has shape (Nbatch, Npix, nx, ny)
+        ## we can scale it by energy to have one image with the correct energy per pixel (blurred out depending on how certain the network is to output a single pixel or many)
+        #energy_tiled = tf.tile(tf.tile(tf.reshape(energy, [Nbatch, Npix, 1, 1]), [1, 1, self.n_x, 1]), [1, 1, 1, self.n_y])
+
+        ## now sum all pixels
+        #image = tf.reduce_sum(pos_rows * energy_tiled, axis = 1) # sums over pixels, as the shape of both is (Nbatch, Npix, nx, ny)
+        #image = tf.reshape(image, [Nbatch, self.n_x, self.n_y, 1]) # add axis for layer
+
+        ## End -----
+
+        # This is an even newer!!! setup:
+        # not using a softmax ... returning the exact single x and y
+        # pos_x and pos_y have shape (Nbatch, Npix, 1)
         # Begin -----
-        pos_x = inputs[0]
-        pos_y = inputs[1]
         energy = inputs[2]
         # get batch size
         Nbatch = K.backend.shape(energy)[0]
         # get number of pixels
         Npix = self.n_pix # K.backend.shape(energy)[1]
 
-        pos_x_tiled = tf.tile(tf.reshape(pos_x, [Nbatch, Npix, self.n_x, 1]), [1, 1, 1, self.n_y])
-        pos_y_tiled = tf.tile(tf.reshape(pos_y, [Nbatch, Npix, 1, self.n_y]), [1, 1, self.n_x, 1])
-        pos_rows = pos_x_tiled*pos_y_tiled
+        # not using a softmax ... returning the exact single x and y
+        # pos_x and pos_y have shape (Nbatch, Npix, 1)
+        pos_x = inputs[0]*(self.n_x-1)
+        pos_y = inputs[1]*(self.n_y-1)
+        x_range = tf.reshape(tf.range(self.n_x*self.n_y, dtype = tf.float32), [1, 1, self.n_x*self.n_y])
+        pos_rolled_out = pos_x + self.n_x*pos_y # results in a number from 0 to self.n_x*self.n_y of shape (Nbatch, Npix, 1)
+        pos_rolled_out = tf.tile(pos_rolled_out, [1, 1, self.n_x*self.n_y])
+        x_range = tf.tile(x_range, [Nbatch, 1, 1])
+        x_range = tf.tile(x_range, [1, Npix, 1])
+        pos_rows = tf.exp(-tf.square(pos_rolled_out - x_range)*0.5*(10.0**2.0))
 
-        # now pos_rows has shape (Nbatch, Npix, nx, ny)
-        # we can scale it by energy to have one image with the correct energy per pixel (blurred out depending on how certain the network is to output a single pixel or many)
-        energy_tiled = tf.tile(tf.tile(tf.reshape(energy, [Nbatch, Npix, 1, 1]), [1, 1, self.n_x, 1]), [1, 1, 1, self.n_y])
+        # now pos_rows has shape (Nbatch, Npix, nx*ny)
+        # we can scale it by energy to have one image with the correct energy per pixel
+        # (blurred out depending on how certain the network is to output a single pixel or many)
+        energy_rolled_out = tf.tile(energy, [1, 1, self.n_x*self.n_y])
 
         # now sum all pixels
-        image = tf.reduce_sum(pos_rows * energy_tiled, axis = 1) # sums over pixels, as the shape of both is (Nbatch, Npix, nx, ny)
-        image = tf.reshape(image, [Nbatch, self.n_x, self.n_y, 1]) # add axis for layer
-
+        image = tf.reduce_sum(pos_rows * energy_rolled_out, axis = 1) # sums over pixels, as the shape of both is (Nbatch, Npix, nx*ny)
+        image = tf.reshape(image, [Nbatch, self.n_x*self.n_y, 1]) # add axis for layer
+        image = tf.reshape(image, [Nbatch, self.n_x, self.n_y, 1]) # split axis 3 in x and y positions
         # End -----
 
         return image
@@ -314,8 +346,10 @@ class RNNWGANGP(object):
     xg = K.layers.recurrent.LSTM(512, return_sequences = True)(xg)
     xg = K.layers.recurrent.LSTM(256, return_sequences = True)(xg)
     xg = K.layers.recurrent.LSTM(128, return_sequences = True)(xg)
-    pos_x = K.layers.TimeDistributed(K.layers.Dense(self.n_x, activation = 'softmax'))(xg)
-    pos_y = K.layers.TimeDistributed(K.layers.Dense(self.n_y, activation = 'softmax'))(xg)
+    #pos_x = K.layers.TimeDistributed(K.layers.Dense(self.n_x, activation = 'softmax'))(xg)
+    #pos_y = K.layers.TimeDistributed(K.layers.Dense(self.n_y, activation = 'softmax'))(xg)
+    pos_x = K.layers.TimeDistributed(K.layers.Dense(1, activation = 'sigmoid'))(xg)
+    pos_y = K.layers.TimeDistributed(K.layers.Dense(1, activation = 'sigmoid'))(xg)
     energy = K.layers.TimeDistributed(K.layers.Dense(1, activation = 'relu'))(xg)
     xg = GenerateImage(self.n_x, self.n_y, self.n_pix)([pos_x, pos_y, energy])
 
