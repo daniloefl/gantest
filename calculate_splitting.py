@@ -31,7 +31,7 @@ def get_splitting_function_values_tf(image):
   # example, ignoring batch axis: Etot = [1, 2, 3]
   # Etot_cum = [1+2+3, 2+3, 3]
   # i-th element contains sum of all elements with indices >= i
-  Etot_cum = tf.cumsum(Etot_per_image, axis = 1, reverse = True) + 1e-6 # shape = (Nbatch, Npix)
+  Etot_cum = tf.cumsum(Etot, axis = 1, reverse = True) + 1e-6 # shape = (Nbatch, Npix)
   
   z = tf.reshape(Etot/Etot_cum, [Nbatch, Npix, 1])
   
