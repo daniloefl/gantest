@@ -361,9 +361,9 @@ class RNNWGANGP(object):
     self.generator_input = Input(shape = (None, self.n_dimensions,), name = 'generator_input')
 
     xg = self.generator_input
-    xg = K.layers.recurrent.LSTM(512, return_sequences = True)(xg)
     xg = K.layers.recurrent.LSTM(256, return_sequences = True)(xg)
-    xg = K.layers.recurrent.LSTM(128, return_sequences = True)(xg)
+    #xg = K.layers.recurrent.LSTM(256, return_sequences = True)(xg)
+    #xg = K.layers.recurrent.LSTM(128, return_sequences = True)(xg)
     #pos_x = K.layers.TimeDistributed(K.layers.Dense(self.n_x, activation = 'softmax'))(xg)
     #pos_y = K.layers.TimeDistributed(K.layers.Dense(self.n_y, activation = 'softmax'))(xg)
     #pos_x = K.layers.TimeDistributed(K.layers.Dense(1, activation = 'sigmoid'))(xg)
