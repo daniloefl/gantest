@@ -1,45 +1,6 @@
 
-import numpy as np
 import tensorflow as tf
 import keras as K
-
-'''
-  Given an image of the jet at shower time t, calculate:
-  z = ratio between highest energy pixel and the total energy in the image
-  Pq_qg  = Cf*(1+z**2)/(1-z)           # prob. of q -> q g
-  Pg_gg  = Nc*(1-z*(1-z))**2/(z*(1-z))  # prob. of g -> g g
-  Pg_qqb = Tr*(z**2 + (1-z)**2)         # prob. of g -> q + qbar
-  Pq_qp  = eq**2 * (1+z**2)/(1-z)       # prob. of q -> q + photon
-
-  with:
-  Cf = 4/3
-  Nc = 3
-  Tr = nf/2 = 5/2 (assuming 5 flavours)
-  eq = charge of quark -> will be set to 1 here, as we are only interested in the correlations
-                          and there is no way of knowing if the splitting came from an up or down flavour
-'''
-def get_splitting_function_values_np(image):
-  Cf = 4.0/3.0
-  Nc = 3.0
-  Tr = 5.0/2.0
-
-  Emax = float(np.amax(image))
-  Etot = float(np.sum(image))
-  z = 1.
-  if Etot <= 0:
-    z = Emax/Etot
-  
-  Pq_qg  = 0.
-  Pg_gg  = 0.
-  Pg_qqb = 0.
-  Pq_qp  = 0.
-  if z != 0. and z != 1.:
-    Pq_qg  = Cf*(1+z**2)/(1-z)
-    Pg_gg  = Nc*(1-z*(1-z))**2/(z*(1-z))
-    Pg_qqb = Tr*(z**2 + (1-z)**2)
-    Pq_qp  = (1+z**2)/(1-z)
-
-  return [z, Pq_qg, Pg_gg, Pg_qqb, Pq_qp]
 
 '''
   Given an image of the jet at shower time t, calculate:
@@ -66,9 +27,13 @@ def get_splitting_function_values_tf(image):
   Nbatch = tf.shape(image)[0]
   Npix = tf.shape(image)[1]
 
-  Emax = float(tf.reduce_max(image, axis = [2]))
-  Etot = float(np.reduce_sum(image, axis = [2])) + 1e-6
-  z = tf.reshape(Emax/Etot, [Nbatch, Npix, 1])
+  Etot = tf.reduce_sum(image, axis = 2) # shape = (Nbatch, Npix)
+  # example, ignoring batch axis: Etot = [1, 2, 3]
+  # Etot_cum = [1+2+3, 2+3, 3]
+  # i-th element contains sum of all elements with indices >= i
+  Etot_cum = tf.cumsum(Etot_per_image, axis = 1, reverse = True) + 1e-6 # shape = (Nbatch, Npix)
+  
+  z = tf.reshape(Etot/Etot_cum, [Nbatch, Npix, 1])
   
   Pq_qg  = Cf*(1+z**2)/(1-z)
   Pg_gg  = Nc*(1-z*(1-z))**2/(z*(1-z))
