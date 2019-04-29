@@ -71,7 +71,13 @@ class GenerateImage(K.layers.Layer):
         return dict(list(base_config.items()) + list(config.items()))
 
     def compute_output_shape(self, input_shape):
-        return (input_shape[0][0], self.n_x, self.n_y, 1)
+        return [(input_shape[0][0], self.n_x, self.n_y, 1),
+                (None, None, 1),
+                (None, None, 1),
+                (None, None, 1),
+                (None, None, 1),
+                (None, None, 1)]
+
 
     def build(self, input_shape):
         super(GenerateImage, self).build(input_shape)
