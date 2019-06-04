@@ -20,9 +20,9 @@ import numpy as np
 # to manipulate data using DataFrame
 import h5py
 
-#import plaidml.keras
-#import plaidml
-#plaidml.keras.install_backend()
+import plaidml.keras
+import plaidml
+plaidml.keras.install_backend()
 
 from keras.layers import Input, Dense, Layer, Lambda
 from keras.models import Model
@@ -31,7 +31,7 @@ from keras.losses import binary_crossentropy, mean_squared_error
 
 import keras as K
 from utils import LayerNormalization
-import tensorflow as tf
+###import tensorflow as tf
 
 mnist = K.datasets.mnist
 
@@ -41,13 +41,22 @@ def smoothen(y):
   box = np.ones(N)/float(N)
   return np.convolve(y, box, mode = 'same')
 
-def gradient_penalty_loss(y_true, y_pred, critic, generator, z, real, n_x, n_y):
-  Ns = K.backend.shape(real)[0]
-  d1 = generator(z)
-  d2 = real
-  diff = d2 - d1
-  epsilon = tf.random.uniform(shape=[Ns, 1, 1, 1], minval = 0., maxval = 1.)
-  interp_input = d1 + (epsilon*diff)
+#def gradient_penalty_loss(y_true, y_pred, critic, generator, z, real, n_x, n_y):
+#  Ns = K.backend.shape(real)[0]
+#  d1 = generator(z)
+#  d2 = real
+#  diff = d2 - d1
+#  epsilon = tf.random.uniform(shape=[Ns, 1, 1, 1], minval = 0., maxval = 1.)
+#  interp_input = d1 + (epsilon*diff)
+#  gradients = K.backend.gradients(critic(interp_input), [interp_input])[0] # shape = (None, 28, 28, 1)
+#  ## not needed as there is a single element in interp_input here (the discriminator output)
+#  ## the only dimension left is the batch, which we just average over in the last step
+#  slopes = K.backend.sqrt(1e-7 + K.backend.sum(K.backend.square(gradients), axis = [1, 2, 3]))
+#  gp = K.backend.mean(K.backend.square(1 - slopes))
+#  return gp
+
+def gradient_penalty_loss(y_true, y_pred, critic, interp_input):
+  ###return K.backend.mean(y_true - y_pred) # TEST! USe this to avoid the following code and check if the gradient is the culprit in PlaidML
   gradients = K.backend.gradients(critic(interp_input), [interp_input])[0] # shape = (None, 28, 28, 1)
   ## not needed as there is a single element in interp_input here (the discriminator output)
   ## the only dimension left is the batch, which we just average over in the last step
@@ -230,15 +239,16 @@ class WGANGP(object):
     self.dummy_input = Input(shape = (1,), name = 'dummy_input')
     self.z_input = Input(shape = (self.n_dimensions,), name = 'z_input')
     self.real_input = Input(shape = (self.n_x, self.n_y, 1), name = 'real_input')
+    self.interp_input = Input(shape = (self.n_x, self.n_y, 1), name = 'interp_input')
 
     from functools import partial
-    partial_gp_loss = partial(gradient_penalty_loss, critic = self.critic, generator = self.generator, z = self.z_input, real = self.real_input, n_x = self.n_x, n_y = self.n_y)
+    partial_gp_loss = partial(gradient_penalty_loss, critic = self.critic, interp_input = self.interp_input)
 
     wdistance = K.layers.Subtract()([self.critic(self.generator(self.z_input)),
                                      self.critic(self.real_input)])
 
-    self.gen_fixed_critic = Model([self.real_input, self.z_input, self.dummy_input],
-                                   [wdistance, self.dummy_input],
+    self.gen_fixed_critic = Model([self.real_input, self.z_input, self.interp_input],
+                                   [wdistance, self.interp_input],
                                    name = "gen_fixed_critic")
     self.gen_fixed_critic.compile(loss = [wasserstein_loss, partial_gp_loss],
                                    loss_weights = [1.0, self.lambda_gp],
@@ -330,10 +340,13 @@ class WGANGP(object):
         x_batch = self.get_batch(size = self.n_batch)
         z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
 
+        epsilon = np.random.uniform(low = 0.0, high = 1.0, size = (self.n_batch, 1, 1, 1))
+        interp_input = x_batch + epsilon*(self.generator.predict(z_batch, verbose = 0) - x_batch)
+
         self.generator.trainable = False
         self.critic.trainable = True
-        self.gen_fixed_critic.train_on_batch([x_batch, z_batch, positive_y],
-                                              [positive_y, positive_y],
+        self.gen_fixed_critic.train_on_batch([x_batch, z_batch, interp_input],
+                                              [positive_y, interp_input],
                                               sample_weight = [positive_y, positive_y])
 
       # step generator
@@ -368,10 +381,13 @@ class WGANGP(object):
           x_batch = self.get_batch(origin = 'test', size = self.n_batch)
           z_batch = np.random.normal(loc = 0.0, scale = 1.0, size = (self.n_batch, self.n_dimensions))
 
+          epsilon = np.random.uniform(low = 0.0, high = 1.0, size = (self.n_batch, 1, 1, 1))
+          interp_input = x_batch + epsilon*(self.generator.predict(z_batch, verbose = 0) - x_batch)
+
           self.generator.trainable = False
           self.critic.trainable = True
-          critic_gradient_penalty += self.gen_fixed_critic.evaluate([x_batch, z_batch, positive_y],
-                                                                    [positive_y, positive_y],
+          critic_gradient_penalty += self.gen_fixed_critic.evaluate([x_batch, z_batch, interp_input],
+                                                                    [positive_y, interp_input],
                                                                     sample_weight = [positive_y, positive_y], verbose = 0)[-1]
         critic_gradient_penalty /= float(self.n_critic)
         if critic_gradient_penalty == 0: critic_gradient_penalty = 1e-20
