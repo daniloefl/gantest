@@ -364,6 +364,12 @@ class RNNWGANGP(object):
     xg = K.layers.recurrent.LSTM(256, return_sequences = True)(xg)
     #xg = K.layers.recurrent.LSTM(256, return_sequences = True)(xg)
     #xg = K.layers.recurrent.LSTM(128, return_sequences = True)(xg)
+    xg = K.layers.TimeDistributed(K.layers.Dense(512, activation = None))(xg)
+    xg = K.layers.TimeDistributed(K.layers.LeakyReLU(0.2))(xg)
+    xg = K.layers.TimeDistributed(K.layers.Dense(256, activation = None))(xg)
+    xg = K.layers.TimeDistributed(K.layers.LeakyReLU(0.2))(xg)
+    xg = K.layers.TimeDistributed(K.layers.Dense(128, activation = None))(xg)
+    xg = K.layers.TimeDistributed(K.layers.LeakyReLU(0.2))(xg)
     #pos_x = K.layers.TimeDistributed(K.layers.Dense(self.n_x, activation = 'softmax'))(xg)
     #pos_y = K.layers.TimeDistributed(K.layers.Dense(self.n_y, activation = 'softmax'))(xg)
     #pos_x = K.layers.TimeDistributed(K.layers.Dense(1, activation = 'sigmoid'))(xg)
@@ -583,7 +589,7 @@ class RNNWGANGP(object):
       ax.set(xlabel='Epoch', ylabel='Loss', title='Training evolution');
     else:
       ax.set(xlabel='Batches', ylabel='Loss', title='Training evolution');
-    ax.set_ylim([1e-2, 10])
+    ax.set_ylim([1e-1, 10])
     ax.set_yscale('log')
     plt.legend(frameon = False)
     plt.savefig(filename)
