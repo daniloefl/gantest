@@ -20,6 +20,7 @@ import numpy as np
 # to manipulate data using DataFrame
 import h5py
 
+# comment this out to use tensorflow
 import plaidml.keras
 import plaidml
 plaidml.keras.install_backend()
@@ -56,7 +57,7 @@ def smoothen(y):
 #  return gp
 
 def gradient_penalty_loss(y_true, y_pred, critic, interp_input):
-  ###return K.backend.mean(y_true - y_pred) # TEST! USe this to avoid the following code and check if the gradient is the culprit in PlaidML
+  #gradients = interp_input # TEST! Use this to avoid the following code and check if the gradient is the culprit in PlaidML
   gradients = K.backend.gradients(critic(interp_input), [interp_input])[0] # shape = (None, 28, 28, 1)
   ## not needed as there is a single element in interp_input here (the discriminator output)
   ## the only dimension left is the batch, which we just average over in the last step
